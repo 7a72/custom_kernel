@@ -10,6 +10,15 @@ jobs:
       KERNEL_WORKSPACE: "/mnt/kernel_workspace"
 
     steps:
+      - name: checkout from git
+        uses: actions/checkout@v5
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.18
+        with:
+          key: ccache-${{ runner.os }}-build
+          max-size: 4G
+
       - name: Set Swap
         run: |
           export SWAP_FILE=$(swapon --show=NAME | tail -n 1)
@@ -38,27 +47,9 @@ jobs:
           sudo mkdir -p /mnt/kernel_workspace
           sudo chmod 0777 /mnt/kernel_workspace
           
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
-          
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
 
-      - name: Restore Ccache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ runner.os }}-los
-
-      - name: Initialize Ccache
-        run: |
-          CCACHED="${{ env.CCACHE_DIR }}/.ccached"
-          if [ ! -f "$CCACHED" ]; then
-            mkdir -p ${{ env.CCACHE_DIR }}
-            ccache -M 4G
-            touch "$CCACHED"
-          fi
-          ccache -s
 
       - name: Restore Pre-built Toolchain
         uses: actions/cache@v3
@@ -115,15 +106,9 @@ jobs:
           # echo "Clean dirty"
           # git add -A
           # git commit -s -a -m "build"
-
-          export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
-          export PATH="/usr/lib/ccache/bin:$PATH"
           
-          export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
-          export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
-          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-          export CCACHE_MAXSIZE="4G"
+          export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           
           echo "Building the kernel..."
           
