@@ -55,7 +55,7 @@ jobs:
           CCACHED="${{ env.CCACHE_DIR }}/.ccached"
           if [ ! -f "$CCACHED" ]; then
             mkdir -p ${{ env.CCACHE_DIR }}
-            ccache -M ${{ env.CCACHE_MAXSIZE }}
+            ccache -M 4G
             touch "$CCACHED"
           fi
           ccache -s
