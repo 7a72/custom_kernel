@@ -92,6 +92,11 @@ jobs:
           echo "Sync kernel source"
           git clone --depth=1 https://github.com/LineageOS/android_kernel_oneplus_sm8650-modules.git -b lineage-22.2 sm8650-modules
           git clone --depth=1 https://github.com/7a72/android_kernel_oneplus_waffle.git -b lineage-22.2 common
+          
+          echo "Get kernel version"
+          cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
+          echo KVER=$(cat ./kver) >> $GITHUB_ENV
+          
           cd common
           
           echo "Pre-modify"
