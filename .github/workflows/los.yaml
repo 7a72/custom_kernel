@@ -115,7 +115,8 @@ jobs:
           # echo "Clean dirty"
           # git add -A
           # git commit -s -a -m "build"
-          
+
+          export PATH="/usr/lib/ccache:$PATH"
           export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
           
           export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -126,13 +127,9 @@ jobs:
           
           echo "Building the kernel..."
           
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config Image
-          
-          # kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
-          # make $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
-          # make $kargs # Build the kernel itself
-          
-          # ccache -s
+          kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
+          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          make CC="ccache clang" $kargs # Build the kernel itself
           
           # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
           # make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
