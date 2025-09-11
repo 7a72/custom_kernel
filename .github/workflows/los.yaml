@@ -6,6 +6,14 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
+    env:
+      KERNEL_WORKSPACE: "/mnt/kernel_workspace"
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_MAXSIZE: 8G
+      CCACHE_DIR: "/mnt/ccache"
+      TOOLCHAIN_DIR: "/mnt/toolchain"
 
     steps:
       - name: Set Swap
@@ -23,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3 git libelf-dev dwarves
+          sudo apt install -y python3 git libelf-dev dwarves ccache
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /bin/repo
@@ -33,22 +41,47 @@ jobs:
           echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
           echo "KBUILD_BUILD_USER=7a72" >> $GITHUB_ENV
           echo "KBUILD_BUILD_HOST=action" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/kernel_workspace
-          sudo chmod 0777 /mnt/kernel_workspace
+          sudo mkdir -p ${{ env.KERNEL_WORKSPACE }}
+          sudo chmod 0777 ${{ env.KERNEL_WORKSPACE }}
+          sudo mkdir -p ${{ env.CCACHE_DIR }}
+          sudo chmod 0777 ${{ env.CCACHE_DIR }}
+          sudo mkdir ${{ env.TOOLCHAIN_DIR }}
+          sudo chmod 0777 ${{ env.TOOLCHAIN_DIR }}
           
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
 
+      - name: Restore Ccache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-los
+
+      - name: Initialize Ccache
+        run: |
+          CCACHED="${{ env.CCACHE_DIR }}/.ccached"
+          if [ ! -f "$CCACHED" ]; then
+            ccache -M ${{ env.CCACHE_MAXSIZE }}
+            touch "$CCACHED"
+          fi
+          ccache -s
+
+      - name: Restore Pre-built Toolchain
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: toolchain-${{ runner.os }}-r536225
+
       - name: Download the Pre-built Toolchain
         run: |
-          echo "Changing to directory: /mnt/kernel_workspace..."
-          cd "/mnt/kernel_workspace"
-          mkdir toolchain
-          cd toolchain
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
-          tar axf clang-r536225.tar.gz
-          rm clang-r536225.tar.gz
-          echo "AOSP_CLANG_PATH=/mnt/kernel_workspace/toolchain/bin" >> $GITHUB_ENV
+          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.ccached"
+          if [ ! -f "$INSTALLED" ]; then
+            cd ${{ env.TOOLCHAIN_DIR }}
+            wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
+            tar axf clang-r536225.tar.gz
+            rm clang-r536225.tar.gz
+            touch "$INSTALLED"
+          fi
 
       - name: Sync the Kernel Source Code
         run: |
@@ -83,13 +116,17 @@ jobs:
           # git add -A
           # git commit -s -a -m "build"
           
-          export PATH=${{ env.AOSP_CLANG_PATH }}:$PATH
+          export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
           type clang
+          export CC="ccache clang"
           
           echo "Building the kernel..."
-          kargs="ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
+          kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
           make $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
           make $kargs # Build the kernel itself
+          
+          ccache -s
+          
           make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
           make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
           make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers
