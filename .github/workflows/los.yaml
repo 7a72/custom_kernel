@@ -8,12 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KERNEL_WORKSPACE: "/mnt/kernel_workspace"
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
-      CCACHE_MAXSIZE: 8G
-      CCACHE_DIR: "/mnt/ccache"
-      TOOLCHAIN_DIR: "/mnt/toolchain"
 
     steps:
       - name: Set Swap
@@ -41,12 +35,11 @@ jobs:
           echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
           echo "KBUILD_BUILD_USER=7a72" >> $GITHUB_ENV
           echo "KBUILD_BUILD_HOST=action" >> $GITHUB_ENV
-          sudo mkdir -p ${{ env.KERNEL_WORKSPACE }}
-          sudo chmod 0777 ${{ env.KERNEL_WORKSPACE }}
-          sudo mkdir -p ${{ env.CCACHE_DIR }}
-          sudo chmod 0777 ${{ env.CCACHE_DIR }}
-          sudo mkdir ${{ env.TOOLCHAIN_DIR }}
-          sudo chmod 0777 ${{ env.TOOLCHAIN_DIR }}
+          sudo mkdir -p /mnt/kernel_workspace
+          sudo chmod 0777 /mnt/kernel_workspace
+          
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
           
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
@@ -61,6 +54,7 @@ jobs:
         run: |
           CCACHED="${{ env.CCACHE_DIR }}/.ccached"
           if [ ! -f "$CCACHED" ]; then
+            mkdir -p ${{ env.CCACHE_DIR }}
             ccache -M ${{ env.CCACHE_MAXSIZE }}
             touch "$CCACHED"
           fi
@@ -76,7 +70,7 @@ jobs:
         run: |
           INSTALLED="${{ env.TOOLCHAIN_DIR }}/.installed"
           if [ ! -f "$INSTALLED" ]; then
-            rm -rf ${{ env.TOOLCHAIN_DIR }}/*
+            mkdir -p ${{ env.TOOLCHAIN_DIR }}
             cd ${{ env.TOOLCHAIN_DIR }}
             wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
             tar axf clang-r536225.tar.gz
@@ -123,15 +117,22 @@ jobs:
           # git commit -s -a -m "build"
           
           export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
-          type clang
-          export CC="ccache clang"
+          
+          export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
+          export CCACHE_NOHASHDIR="true"
+          export CCACHE_HARDLINK="true"
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_MAXSIZE="4G"
           
           echo "Building the kernel..."
-          kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
-          make $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
-          make $kargs # Build the kernel itself
           
-          ccache -s
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config Image
+          
+          # kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
+          # make $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          # make $kargs # Build the kernel itself
+          
+          # ccache -s
           
           # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
           # make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
