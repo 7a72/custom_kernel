@@ -116,8 +116,8 @@ jobs:
           # git add -A
           # git commit -s -a -m "build"
 
-          export PATH="/usr/lib/ccache:$PATH"
           export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
+          export PATH="/usr/lib/ccache/bin:$PATH"
           
           export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
           export CCACHE_NOHASHDIR="true"
