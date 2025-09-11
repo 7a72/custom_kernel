@@ -44,8 +44,11 @@ jobs:
           echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
           echo "KBUILD_BUILD_USER=7a72" >> $GITHUB_ENV
           echo "KBUILD_BUILD_HOST=action" >> $GITHUB_ENV
+          
           sudo mkdir -p /mnt/kernel_workspace
           sudo chmod 0777 /mnt/kernel_workspace
+          
+          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
           
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
