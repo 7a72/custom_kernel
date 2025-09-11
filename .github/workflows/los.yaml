@@ -74,8 +74,9 @@ jobs:
 
       - name: Download the Pre-built Toolchain
         run: |
-          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.ccached"
+          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.installed"
           if [ ! -f "$INSTALLED" ]; then
+            rm -rf ${{ env.TOOLCHAIN_DIR }}/*
             cd ${{ env.TOOLCHAIN_DIR }}
             wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
             tar axf clang-r536225.tar.gz
@@ -127,27 +128,25 @@ jobs:
           
           ccache -s
           
-          make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
-          make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
-          make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers
-          cp ./out/arch/arm64/boot/Image /mnt/kernel_workspace/Image
+          # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
+          # make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
+          # make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers
 
-      - name: Upload Kernel_Prebuilts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Kernel_Prebuilts
-          path: /mnt/kernel_workspace/Kernel_Prebuilts/*
+      # - name: Upload Kernel_Prebuilts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Kernel_Prebuilts
+      #     path: /mnt/kernel_workspace/Kernel_Prebuilts/*
 
       - name: Create AnyKernel3
         run: |
           echo "Changing to configuration directory: /mnt/kernel_workspace/..."
           cd "/mnt/kernel_workspace/"
-          cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
-          echo KVER=$(cat ./kver) >> $GITHUB_ENV
+          
           git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
           
           echo "Copying Image"
-          mv /mnt/kernel_workspace/Image ./AnyKernel3/Image
+          cp /mnt/kernel_workspace/common/out/arch/arm64/boot/Image ./AnyKernel3/Image
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
