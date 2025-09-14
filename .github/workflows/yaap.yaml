@@ -64,6 +64,8 @@ jobs:
           sed -i 's/check_defconfig//' build.config.gki || true
           sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
           sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"0x$KBUILD_BUILD_USER"/' scripts/mkcompile_h || true
+          wget https://raw.githubusercontent.com/7a72/custom_kernel/refs/heads/main/patches/rekernel_6_1.patch
+          patch -p1 < rekernel_6_1.patch
 
       - name: Add KernelSU
         run: |
@@ -93,7 +95,7 @@ jobs:
           # echo "CONFIG_IPC_NS=y" >> ./arch/arm64/configs/gki_defconfig
           # echo "CONFIG_USER_NS=y" >> ./arch/arm64/configs/gki_defconfig
           # echo "CONFIG_BPF_STREAM_PARSER=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_MODULE_FORCE_LOAD=y" >> ./arch/arm64/configs/gki_defconfig
+          echo "CONFIG_REKERNEL=y" >> ./arch/arm64/configs/gki_defconfig
           
           # cat ./arch/arm64/configs/gki_defconfig
 
