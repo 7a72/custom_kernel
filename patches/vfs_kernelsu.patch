@@ -96,7 +96,7 @@ index eec38c28..00000000
 -
 -#endif
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index a63d34a7..e9d25eac 100644
+index a63d34a7..9fbc9f69 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
 @@ -4,19 +4,13 @@
@@ -120,7 +120,15 @@ index a63d34a7..e9d25eac 100644
  #include <linux/uaccess.h>
  #include <linux/uidgid.h>
  #include <linux/version.h>
-@@ -305,9 +299,6 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -34,7 +28,6 @@
+ #endif
+ 
+ #include "allowlist.h"
+-#include "arch.h"
+ #include "core_hook.h"
+ #include "klog.h" // IWYU pragma: keep
+ #include "ksu.h"
+@@ -305,9 +298,6 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  			pr_err("prctl reply error, cmd: %lu\n", arg2);
  		}
  		u32 version_flags = 0;
@@ -130,7 +138,7 @@ index a63d34a7..e9d25eac 100644
  		if (arg4 &&
  		    copy_to_user(arg4, &version_flags, sizeof(version_flags))) {
  			pr_err("prctl reply error, cmd: %lu\n", arg2);
-@@ -633,66 +624,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -633,66 +623,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  	return 0;
  }
  
@@ -214,7 +222,7 @@ index a63d34a7..e9d25eac 100644
  	return 0;
  }
  
-@@ -715,11 +671,12 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
+@@ -715,11 +670,12 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
  	return ksu_handle_setuid(new, old);
  }
  
@@ -228,7 +236,7 @@ index a63d34a7..e9d25eac 100644
  };
  
  void __init ksu_lsm_hook_init(void)
-@@ -727,184 +684,7 @@ void __init ksu_lsm_hook_init(void)
+@@ -727,184 +683,7 @@ void __init ksu_lsm_hook_init(void)
  	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
  }
  
@@ -1119,7 +1127,7 @@ index cc2df243..7fff4807 100644
 +
  #endif
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index e1efb073..aca4abe7 100644
+index e1efb073..fe8ec7b6 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
 @@ -4,15 +4,14 @@
@@ -1210,7 +1218,8 @@ index e1efb073..aca4abe7 100644
 +			 int *__unused_flags)
  {
  	// const char sh[] = SH_PATH;
- 	const char su[] = SU_PATH;
+-	const char su[] = SU_PATH;
++	// const char su[] = SU_PATH;
  
 -	if (!ksu_is_allow_uid(current_uid().val)) {
 +	if (!is_su_allowed((const void *)filename_user))
@@ -1320,7 +1329,8 @@ index e1efb073..aca4abe7 100644
 -#ifdef CONFIG_KPROBES
 -
 -static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
--{
++int __ksu_handle_devpts(struct inode *inode)
+ {
 -	struct pt_regs *real_regs = PT_REAL_REGS(regs);
 -	int *dfd = (int *)&PT_REGS_PARM1(real_regs);
 -	const char __user **filename_user =
@@ -1331,8 +1341,7 @@ index e1efb073..aca4abe7 100644
 -}
 -
 -static int newfstatat_handler_pre(struct kprobe *p, struct pt_regs *regs)
-+int __ksu_handle_devpts(struct inode *inode)
- {
+-{
 -	struct pt_regs *real_regs = PT_REAL_REGS(regs);
 -	int *dfd = (int *)&PT_REGS_PARM1(real_regs);
 -	const char __user **filename_user =
