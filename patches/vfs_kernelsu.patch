@@ -1,5 +1,5 @@
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 67f177f4..72e44867 100644
+index 67f177f..72e4486 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -1,13 +1,11 @@
@@ -19,7 +19,7 @@ index 67f177f4..72e44867 100644
  	bool "KernelSU debug mode"
 diff --git a/kernel/arch.h b/kernel/arch.h
 deleted file mode 100644
-index eec38c28..00000000
+index eec38c2..0000000
 --- a/kernel/arch.h
 +++ /dev/null
 @@ -1,72 +0,0 @@
@@ -96,10 +96,10 @@ index eec38c28..00000000
 -
 -#endif
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index a63d34a7..9fbc9f69 100644
+index a63d34a..80a6bd1 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
-@@ -4,19 +4,13 @@
+@@ -4,37 +4,22 @@
  #include <linux/err.h>
  #include <linux/init.h>
  #include <linux/init_task.h>
@@ -120,15 +120,26 @@ index a63d34a7..9fbc9f69 100644
  #include <linux/uaccess.h>
  #include <linux/uidgid.h>
  #include <linux/version.h>
-@@ -34,7 +28,6 @@
- #endif
+ #include <linux/mount.h>
+-
+ #include <linux/fs.h>
+ #include <linux/namei.h>
  
+-#ifdef MODULE
+-#include <linux/list.h>
+-#include <linux/irqflags.h>
+-#include <linux/mm_types.h>
+-#include <linux/rcupdate.h>
+-#include <linux/vmalloc.h>
+-#endif
+-
  #include "allowlist.h"
 -#include "arch.h"
++
  #include "core_hook.h"
  #include "klog.h" // IWYU pragma: keep
  #include "ksu.h"
-@@ -305,9 +298,6 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -305,9 +290,6 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  			pr_err("prctl reply error, cmd: %lu\n", arg2);
  		}
  		u32 version_flags = 0;
@@ -138,7 +149,7 @@ index a63d34a7..9fbc9f69 100644
  		if (arg4 &&
  		    copy_to_user(arg4, &version_flags, sizeof(version_flags))) {
  			pr_err("prctl reply error, cmd: %lu\n", arg2);
-@@ -633,66 +623,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -633,66 +615,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  	return 0;
  }
  
@@ -183,7 +194,7 @@ index a63d34a7..9fbc9f69 100644
 -	.symbol_name = "vfs_rename",
 -	.pre_handler = renameat_handler_pre,
 -};
-+extern int ksu_handle_devpts(struct inode *inode); // sucompat.c
++extern int __ksu_handle_devpts(struct inode *inode); // sucompat.c
  
 -__maybe_unused int ksu_kprobe_init(void)
 +int ksu_inode_permission(struct inode *inode, int mask)
@@ -197,7 +208,7 @@ index a63d34a7..9fbc9f69 100644
 +	if (inode && inode->i_sb 
 +		&& unlikely(inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)) {
 +		//pr_info("%s: handling devpts for: %s \n", __func__, current->comm);
-+		ksu_handle_devpts(inode);
++		__ksu_handle_devpts(inode);
  	}
 -
 -	rc = register_kprobe(&renameat_kp);
@@ -222,7 +233,7 @@ index a63d34a7..9fbc9f69 100644
  	return 0;
  }
  
-@@ -715,11 +670,12 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
+@@ -715,11 +662,12 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
  	return ksu_handle_setuid(new, old);
  }
  
@@ -236,7 +247,7 @@ index a63d34a7..9fbc9f69 100644
  };
  
  void __init ksu_lsm_hook_init(void)
-@@ -727,184 +683,7 @@ void __init ksu_lsm_hook_init(void)
+@@ -727,184 +675,7 @@ void __init ksu_lsm_hook_init(void)
  	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
  }
  
@@ -422,7 +433,7 @@ index a63d34a7..9fbc9f69 100644
 -#endif
 -}
 diff --git a/kernel/core_hook.h b/kernel/core_hook.h
-index 616951e8..4bebe3df 100644
+index 616951e..4bebe3d 100644
 --- a/kernel/core_hook.h
 +++ b/kernel/core_hook.h
 @@ -4,6 +4,5 @@
@@ -434,7 +445,7 @@ index 616951e8..4bebe3df 100644
  #endif
 diff --git a/kernel/export_symbol.txt b/kernel/export_symbol.txt
 deleted file mode 100644
-index 1abd805e..00000000
+index 1abd805..0000000
 --- a/kernel/export_symbol.txt
 +++ /dev/null
 @@ -1,2 +0,0 @@
@@ -442,7 +453,7 @@ index 1abd805e..00000000
 -unregister_kprobe
 diff --git a/kernel/include/ksu_hook.h b/kernel/include/ksu_hook.h
 deleted file mode 100644
-index ea0b04d3..00000000
+index ea0b04d..0000000
 --- a/kernel/include/ksu_hook.h
 +++ /dev/null
 @@ -1,28 +0,0 @@
@@ -475,7 +486,7 @@ index ea0b04d3..00000000
 -
 -#endif
 diff --git a/kernel/kernel_compat.c b/kernel/kernel_compat.c
-index d4ee546d..ed93ef14 100644
+index d4ee546..d4288c1 100644
 --- a/kernel/kernel_compat.c
 +++ b/kernel/kernel_compat.c
 @@ -53,7 +53,9 @@ struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
@@ -498,53 +509,67 @@ index d4ee546d..ed93ef14 100644
  	}
  	return fp;
  }
-@@ -81,8 +85,7 @@ ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
- 	return kernel_write(p, buf, count, pos);
- }
- 
--long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
--				   long count)
-+long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
+@@ -86,3 +90,27 @@ long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
  {
--	return strncpy_from_user_nofault(dst, unsafe_addr, count);
-+	return copy_from_user_nofault(dst, src, size);
+ 	return strncpy_from_user_nofault(dst, unsafe_addr, count);
  }
++
++long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
++{
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
++	return copy_from_user_nofault(dst, src, size);
++#else
++	// https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
++	long ret = -EFAULT;
++	mm_segment_t old_fs = get_fs();
++
++	set_fs(USER_DS);
++	// tweaked to use ksu_access_ok
++	if (ksu_access_ok(src, size)) {
++		pagefault_disable();
++		ret = __copy_from_user_inatomic(dst, src, size);
++		pagefault_enable();
++	}
++	set_fs(old_fs);
++
++	if (ret)
++		return -EFAULT;
++	return 0;
++#endif
++}
 diff --git a/kernel/kernel_compat.h b/kernel/kernel_compat.h
-index 4bcfbf38..97dd245b 100644
+index 4bcfbf3..fca233d 100644
 --- a/kernel/kernel_compat.h
 +++ b/kernel/kernel_compat.h
-@@ -20,10 +20,6 @@
- #endif
- #endif
- 
--extern long ksu_strncpy_from_user_nofault(char *dst,
--					  const void __user *unsafe_addr,
--					  long count);
--
- extern void ksu_android_ns_fs_check();
- extern struct file *ksu_filp_open_compat(const char *filename, int flags,
- 					 umode_t mode);
-@@ -32,4 +28,18 @@ extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
+@@ -32,4 +32,26 @@ extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
  extern ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
  				       size_t count, loff_t *pos);
  
-+extern long ksu_copy_from_user_nofault(void *dst, const void __user *src,
-+                                       size_t size);
++extern int ksu_access_ok(const void *addr, unsigned long size);
++extern long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size);
++
++/*
++ * ksu_copy_from_user_retry
++ * try nofault copy first, if it fails, try with plain
++ * paramters are the same as copy_from_user
++ * 0 = success
++ * + hot since this is reused on sucompat
++ */
 +__attribute__((hot))
-+static long ksu_copy_from_user_retry(void *to, const void __user *from,
-+                                     unsigned long count)
++static long ksu_copy_from_user_retry(void *to, 
++		const void __user *from, unsigned long count)
 +{
 +	long ret = ksu_copy_from_user_nofault(to, from, count);
-+
 +	if (likely(!ret))
 +		return ret;
 +
++	// we faulted! fallback to slow path
 +	return copy_from_user(to, from, count);
 +}
 +
  #endif
 diff --git a/kernel/ksu.c b/kernel/ksu.c
-index d517c3b5..e4658086 100644
+index d517c3b..60227f4 100644
 --- a/kernel/ksu.c
 +++ b/kernel/ksu.c
 @@ -5,7 +5,6 @@
@@ -555,24 +580,21 @@ index d517c3b5..e4658086 100644
  #include "core_hook.h"
  #include "klog.h" // IWYU pragma: keep
  #include "ksu.h"
-@@ -18,25 +17,6 @@ bool ksu_queue_work(struct work_struct *work)
- 	return queue_work(ksu_workqueue, work);
- }
+@@ -21,22 +20,13 @@ bool ksu_queue_work(struct work_struct *work)
+ extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+ 					void *argv, void *envp, int *flags);
  
--extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
--					void *argv, void *envp, int *flags);
--
 -extern int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 -				    void *argv, void *envp, int *flags);
 -
--int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
--			void *envp, int *flags)
--{
+ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+ 			void *envp, int *flags)
+ {
 -	ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags);
--	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
--					    flags);
--}
--
+ 	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
+ 					    flags);
+ }
+ 
 -extern void ksu_sucompat_init();
 -extern void ksu_sucompat_exit();
 -extern void ksu_ksud_init();
@@ -581,7 +603,7 @@ index d517c3b5..e4658086 100644
  int __init kernelsu_init(void)
  {
  #ifdef CONFIG_KSU_DEBUG
-@@ -57,18 +37,6 @@ int __init kernelsu_init(void)
+@@ -57,18 +47,6 @@ int __init kernelsu_init(void)
  
  	ksu_throne_tracker_init();
  
@@ -600,7 +622,7 @@ index d517c3b5..e4658086 100644
  	return 0;
  }
  
-@@ -80,12 +48,6 @@ void kernelsu_exit(void)
+@@ -80,12 +58,6 @@ void kernelsu_exit(void)
  
  	destroy_workqueue(ksu_workqueue);
  
@@ -614,10 +636,10 @@ index d517c3b5..e4658086 100644
  
  module_init(kernelsu_init);
 diff --git a/kernel/ksud.c b/kernel/ksud.c
-index 98fee107..29cfe380 100644
+index 98fee10..a815ad4 100644
 --- a/kernel/ksud.c
 +++ b/kernel/ksud.c
-@@ -7,14 +7,14 @@
+@@ -7,14 +7,13 @@
  #include <linux/fs.h>
  #include <linux/version.h>
  #include <linux/input-event-codes.h>
@@ -627,14 +649,13 @@ index 98fee107..29cfe380 100644
  #include <linux/uaccess.h>
  #include <linux/workqueue.h>
 +#include <linux/sched/signal.h>
-+#include <linux/slab.h>
  
  #include "allowlist.h"
 -#include "arch.h"
  #include "klog.h" // IWYU pragma: keep
  #include "ksud.h"
  #include "kernel_compat.h"
-@@ -47,15 +47,9 @@ static void stop_vfs_read_hook();
+@@ -47,15 +46,9 @@ static void stop_vfs_read_hook();
  static void stop_execve_hook();
  static void stop_input_hook();
  
@@ -650,7 +671,7 @@ index 98fee107..29cfe380 100644
  
  u32 ksu_devpts_sid;
  
-@@ -76,201 +70,114 @@ void on_post_fs_data(void)
+@@ -76,201 +69,153 @@ void on_post_fs_data(void)
  	pr_info("devpts sid: %d\n", ksu_devpts_sid);
  }
  
@@ -668,155 +689,187 @@ index 98fee107..29cfe380 100644
 -};
 -
 -static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
-+static int ksu_handle_bprm_ksud(const char *filename, const char *argv1,
-+								const char *envp, size_t envp_len)
++// since _ksud handler only uses argv and envp for comparisons
++// this can probably work
++// adapted from ksu_handle_execveat_ksud
++static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const char *envp, size_t envp_len)
  {
 -	const char __user *native;
-+	static const char app_process[] = "/system/bin/app_process";
-+	static const char system_bin_init[] = "/system/bin/init";
-+	static bool first_app_process = true;
-+	static bool init_second_stage_executed = false;
- 
+-
 -#ifdef CONFIG_COMPAT
 -	if (unlikely(argv.is_compat)) {
 -		compat_uptr_t compat;
+-
+-		if (get_user(compat, argv.ptr.compat + nr))
+-			return ERR_PTR(-EFAULT);
++	static const char app_process[] = "/system/bin/app_process";
++	static bool first_app_process = true;
+ 
+-		return compat_ptr(compat);
+-	}
+-#endif
++	/* This applies to versions Android 10+ */
++	static const char system_bin_init[] = "/system/bin/init";
++	/* This applies to versions between Android 6 ~ 9  */
++	static const char old_system_init[] = "/init";
++	static bool init_second_stage_executed = false;
+ 
+-	if (get_user(native, argv.ptr.native + nr))
+-		return ERR_PTR(-EFAULT);
++	// return early when disabled
 +	if (!ksu_execveat_hook)
 +		return 0;
  
--		if (get_user(compat, argv.ptr.compat + nr))
--			return ERR_PTR(-EFAULT);
+-	return native;
+-}
 +	if (!filename)
 +		return 0;
  
--		return compat_ptr(compat);
-+	if (!init_second_stage_executed &&
-+		!memcmp(filename, system_bin_init, sizeof(system_bin_init) - 1)) {
+-/*
+- * count() counts the number of strings in array ARGV.
+- */
++	// debug! remove me!
++	// pr_info("%s: filename: %s argv1: %s envp_len: %zu\n", __func__, filename, argv1, envp_len);
+ 
+-/*
+- * Make sure old GCC compiler can use __maybe_unused,
+- * Test passed in 4.4.x ~ 4.9.x when use GCC.
+- */
++	if (init_second_stage_executed)
++		goto first_app_process;
+ 
+-static int __maybe_unused count(struct user_arg_ptr argv, int max)
+-{
+-	int i = 0;
++	// /system/bin/init with argv1
++	if (!init_second_stage_executed 
++		&& (!memcmp(filename, system_bin_init, sizeof(system_bin_init) - 1))) {
 +		if (argv1 && !strcmp(argv1, "second_stage")) {
 +			pr_info("%s: /system/bin/init second_stage executed\n", __func__);
 +			apply_kernelsu_rules();
 +			init_second_stage_executed = true;
 +			ksu_android_ns_fs_check();
-+		} else {
-+			const char *envp_n = envp;
-+			unsigned int envc = 1;
-+			do {
-+				if (strstarts(envp_n, "INIT_SECOND_STAGE"))
-+					break;
-+				envp_n += strlen(envp_n) + 1;
-+				envc++;
-+			} while (envp_n < envp + envp_len);
-+
-+			pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
-+
-+			if (!strcmp(envp_n, "INIT_SECOND_STAGE=1") ||
-+				!strcmp(envp_n, "INIT_SECOND_STAGE=true")) {
-+				pr_info("%s: /system/bin/init +envp: INIT_SECOND_STAGE executed\n", __func__);
-+				apply_kernelsu_rules();
-+				init_second_stage_executed = true;
-+				ksu_android_ns_fs_check();
-+			}
 +		}
- 	}
--#endif
- 
--	if (get_user(native, argv.ptr.native + nr))
--		return ERR_PTR(-EFAULT);
-+	if (first_app_process && !memcmp(filename, app_process, sizeof(app_process) - 1)) {
-+		first_app_process = false;
-+		pr_info("%s: exec app_process, /data prepared, second_stage: %d\n",
-+				__func__, init_second_stage_executed);
-+		on_post_fs_data();
-+		stop_execve_hook();
 +	}
  
--	return native;
-+	return 0;
- }
- 
--/*
-- * count() counts the number of strings in array ARGV.
-- */
--
--/*
-- * Make sure old GCC compiler can use __maybe_unused,
-- * Test passed in 4.4.x ~ 4.9.x when use GCC.
-- */
--
--static int __maybe_unused count(struct user_arg_ptr argv, int max)
-+int ksu_handle_pre_ksud(const char *filename)
- {
--	int i = 0;
--
 -	if (argv.ptr.native != NULL) {
 -		for (;;) {
 -			const char __user *p = get_user_arg_ptr(argv, i);
-+	if (likely(!ksu_execveat_hook))
-+		return 0;
++	// /init with argv1
++	if (!init_second_stage_executed 
++		&& (!memcmp(filename, old_system_init, sizeof(old_system_init) - 1))) {
++		if (argv1 && !strcmp(argv1, "--second-stage")) {
++			pr_info("%s: /init --second-stage executed\n", __func__);
++			apply_kernelsu_rules();
++			init_second_stage_executed = true;
++			ksu_android_ns_fs_check();
++		}
++	}
  
 -			if (!p)
--				break;
-+	if (likely(strcmp(filename, "/system/bin/init") &&
-+		!strstarts(filename, "/system/bin/app_process")))
-+		return 0;
++	// /init without argv1/useless-argv1 but usable envp
++	// untested! TODO: test and debug me!
++	if (!init_second_stage_executed && (!memcmp(filename, old_system_init, sizeof(old_system_init) - 1))) {
++		
++		// we hunt for "INIT_SECOND_STAGE"
++		const char *envp_n = envp;
++		unsigned int envc = 1;
++		do {
++			if (strstarts(envp_n, "INIT_SECOND_STAGE"))
+ 				break;
  
 -			if (IS_ERR(p))
 -				return -EFAULT;
-+	if (!current || !current->mm)
-+		return 0;
- 
+-
 -			if (i >= max)
 -				return -E2BIG;
 -			++i;
-+	unsigned long arg_start = current->mm->arg_start;
-+	unsigned long arg_end = current->mm->arg_end;
-+	unsigned long env_start = current->mm->env_start;
-+	unsigned long env_end = current->mm->env_end;
- 
+-
 -			if (fatal_signal_pending(current))
 -				return -ERESTARTNOHAND;
 -			cond_resched();
--		}
--	}
++			envp_n += strlen(envp_n) + 1;
++			envc++;
++		} while (envp_n < envp + envp_len);
++		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
++		
++		if (!strcmp(envp_n, "INIT_SECOND_STAGE=1")
++			|| !strcmp(envp_n, "INIT_SECOND_STAGE=true") ) {
++			pr_info("%s: /init +envp: INIT_SECOND_STAGE executed\n", __func__);
++			apply_kernelsu_rules();
++			init_second_stage_executed = true;
++			ksu_android_ns_fs_check();
+ 		}
+ 	}
 -	return i;
--}
-+	size_t arg_len = arg_end - arg_start;
-+	size_t envp_len = env_end - env_start;
++
++first_app_process:
++	if (first_app_process && !memcmp(filename, app_process, sizeof(app_process) - 1)) {
++		first_app_process = false;
++		pr_info("%s: exec app_process, /data prepared, second_stage: %d\n", __func__, init_second_stage_executed);
++		on_post_fs_data();
++		stop_execve_hook();
++	}
++
++	return 0;
+ }
  
 -// IMPORTANT NOTE: the call from execve_handler_pre WON'T provided correct value for envp and flags in GKI version
 -int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 -			     struct user_arg_ptr *argv,
 -			     struct user_arg_ptr *envp, int *flags)
--{
++int ksu_handle_pre_ksud(const char *filename)
+ {
 -#ifndef CONFIG_KPROBES
 -	if (!ksu_execveat_hook) {
-+	if (arg_len <= 0 || envp_len <= 0)
++
++	if (likely(!ksu_execveat_hook))
  		return 0;
 -	}
 -#endif
 -	struct filename *filename;
--
+ 
 -	static const char app_process[] = "/system/bin/app_process";
 -	static bool first_app_process = true;
++	// not /system/bin/init, not /init, not /system/bin/app_process (64/32 thingy)
++	// return 0;
++	if (likely(strcmp(filename, "/system/bin/init") && strcmp(filename, "/init")
++		&& !strstarts(filename, "/system/bin/app_process") ))
++		return 0;
  
 -	/* This applies to versions Android 10+ */
 -	static const char system_bin_init[] = "/system/bin/init";
 -	/* This applies to versions between Android 6 ~ 9  */
 -	static const char old_system_init[] = "/init";
 -	static bool init_second_stage_executed = false;
-+	#define ARGV_MAX 32
-+	#define ENVP_MAX 256
-+	char args[ARGV_MAX];
-+	char envp[ENVP_MAX];
-+	size_t argv_copy_len = (arg_len > ARGV_MAX) ? ARGV_MAX : arg_len;
-+	size_t envp_copy_len = (envp_len > ENVP_MAX) ? ENVP_MAX : envp_len;
++	if (!current || !current->mm)
++		return 0;
++
++	// https://elixir.bootlin.com/linux/v4.14.1/source/include/linux/mm_types.h#L429
++	// unsigned long arg_start, arg_end, env_start, env_end;
++	unsigned long arg_start = current->mm->arg_start;
++	unsigned long arg_end = current->mm->arg_end;
++	unsigned long env_start = current->mm->env_start;
++	unsigned long env_end = current->mm->env_end;
  
 -	if (!filename_ptr)
-+	if (ksu_copy_from_user_retry(args, (void __user *)arg_start, argv_copy_len))
++	size_t arg_len = arg_end - arg_start;
++	size_t envp_len = env_end - env_start;
++
++	if (arg_len <= 0 || envp_len <= 0) // this wont make sense, filter it
  		return 0;
  
 -	filename = *filename_ptr;
 -	if (IS_ERR(filename)) {
-+	if (ksu_copy_from_user_retry(envp, (void __user *)env_start, envp_copy_len))
++	#define ARGV_MAX 32  // this is enough for argv1
++	#define ENVP_MAX 256  // this is enough for INIT_SECOND_STAGE
++	char args[ARGV_MAX];
++	size_t argv_copy_len = (arg_len > ARGV_MAX) ? ARGV_MAX : arg_len;
++	char envp[ENVP_MAX];
++	size_t envp_copy_len = (envp_len > ENVP_MAX) ? ENVP_MAX : envp_len;
++
++	// we cant use strncpy on here, else it will truncate once it sees \0
++	if (ksu_copy_from_user_retry(args, (void __user *)arg_start, argv_copy_len))
  		return 0;
 -	}
  
@@ -906,18 +959,8 @@ index 98fee107..29cfe380 100644
 -			}
 -		}
 -	}
-+	args[ARGV_MAX - 1] = '\0';
-+	envp[ENVP_MAX - 1] = '\0';
-+
-+#ifdef CONFIG_KSU_DEBUG
-+	const char *envp_n = envp;
-+	unsigned int envc = 1;
-+	do {
-+		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
-+		envp_n += strlen(envp_n) + 1;
-+		envc++;
-+	} while (envp_n < envp + envp_copy_len);
-+#endif
++	if (ksu_copy_from_user_retry(envp, (void __user *)env_start, envp_copy_len))
++		return 0;
  
 -	if (unlikely(first_app_process && !memcmp(filename->name, app_process,
 -						  sizeof(app_process) - 1))) {
@@ -927,16 +970,31 @@ index 98fee107..29cfe380 100644
 -		on_post_fs_data(); // we keep this for old ksud
 -		stop_execve_hook();
 -	}
-+	char *argv1 = args + strlen(args) + 1;
-+	if (argv1 >= args + argv_copy_len)
-+		argv1 = "";
++	args[ARGV_MAX - 1] = '\0';
++	envp[ENVP_MAX - 1] = '\0';
++
++#ifdef CONFIG_KSU_DEBUG
++	char *envp_n = envp;
++	unsigned int envc = 1;
++	do {
++		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
++		envp_n += strlen(envp_n) + 1;
++		envc++;
++	} while (envp_n < envp + envp_copy_len);
++#endif
  
 -	return 0;
++	// we only need argv1 !
++	// abuse strlen here since it only gets length up to \0
++	char *argv1 = args + strlen(args) + 1;
++	if (argv1 >= args + argv_copy_len) // out of bounds!
++		argv1 = "";
++
 +	return ksu_handle_bprm_ksud(filename, argv1, envp, envp_copy_len);
  }
  
  static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
-@@ -306,11 +213,11 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
+@@ -306,11 +251,11 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
  int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
  			size_t *count_ptr, loff_t **pos)
  {
@@ -950,7 +1008,7 @@ index 98fee107..29cfe380 100644
  	struct file *file;
  	char __user *buf;
  	size_t count;
-@@ -419,11 +326,11 @@ static bool is_volumedown_enough(unsigned int count)
+@@ -419,11 +364,11 @@ static bool is_volumedown_enough(unsigned int count)
  int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
  				  int *value)
  {
@@ -964,7 +1022,7 @@ index 98fee107..29cfe380 100644
  	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
  		int val = *value;
  		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-@@ -461,147 +368,23 @@ bool ksu_is_safe_mode()
+@@ -461,147 +406,22 @@ bool ksu_is_safe_mode()
  	return false;
  }
  
@@ -1070,19 +1128,19 @@ index 98fee107..29cfe380 100644
  {
 -	static bool input_hook_stopped = false;
 -	if (input_hook_stopped) {
-+	if (!ksu_input_hook) {
- 		return;
- 	}
+-		return;
+-	}
 -	input_hook_stopped = true;
 -#ifdef CONFIG_KPROBES
 -	bool ret = schedule_work(&stop_input_hook_work);
 -	pr_info("unregister input kprobe: %d!\n", ret);
 -#else
++	if (!ksu_input_hook) { return; }
  	ksu_input_hook = false;
  	pr_info("stop input_hook\n");
 -#endif
  }
--
+ 
 -// ksud: module support
 -void ksu_ksud_init()
 -{
@@ -1115,7 +1173,7 @@ index 98fee107..29cfe380 100644
 -}
 \ No newline at end of file
 diff --git a/kernel/ksud.h b/kernel/ksud.h
-index cc2df243..7fff4807 100644
+index cc2df24..7fff480 100644
 --- a/kernel/ksud.h
 +++ b/kernel/ksud.h
 @@ -11,4 +11,7 @@ bool ksu_is_safe_mode(void);
@@ -1127,7 +1185,7 @@ index cc2df243..7fff4807 100644
 +
  #endif
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index e1efb073..fe8ec7b6 100644
+index e1efb07..de36cbb 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
 @@ -4,15 +4,14 @@
@@ -1147,28 +1205,45 @@ index e1efb073..fe8ec7b6 100644
  #include "klog.h" // IWYU pragma: keep
  #include "ksud.h"
  #include "kernel_compat.h"
-@@ -22,6 +21,8 @@
- 
- extern void escape_to_root();
- 
-+static bool ksu_sucompat_integrated __read_mostly = true;
-+
- static void __user *userspace_stack_buffer(const void *d, size_t len)
- {
- 	/* To avoid having to mmap a page in userspace, just write below the stack
-@@ -45,65 +46,81 @@ static char __user *ksud_user_path(void)
+@@ -45,67 +44,95 @@ static char __user *ksud_user_path(void)
  	return userspace_stack_buffer(ksud_path, sizeof(ksud_path));
  }
  
 -int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 -			 int *__unused_flags)
++
++static long ksu_strncpy_from_user_retry(char *dst, 
++			const void __user *unsafe_addr, long count)
+ {
+-	const char su[] = SU_PATH;
++	long ret = ksu_strncpy_from_user_nofault(dst, unsafe_addr, count);
++	if (likely(ret >= 0))
++		return ret;
+ 
+-	if (!ksu_is_allow_uid(current_uid().val)) {
+-		return 0;
+-	}
++	// we faulted! fallback to slow path
++	if (unlikely(!ksu_access_ok(unsafe_addr, count)))
++		return -EFAULT;
+ 
+-	char path[sizeof(su) + 1];
+-	memset(path, 0, sizeof(path));
+-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
++	return strncpy_from_user(dst, unsafe_addr, count);
++}
+ 
+-	if (unlikely(!memcmp(path, su, sizeof(su)))) {
+-		pr_info("faccessat su->sh!\n");
+-		*filename_user = sh_user_path();
+-	}
++// every little bit helps here
 +__attribute__((hot, no_stack_protector))
 +static __always_inline bool is_su_allowed(const void *ptr_to_check)
 +{
 +	barrier();
-+	if (!ksu_sucompat_integrated)
-+		return false;
-+
+ 
+-	return 0;
 +	if (likely(!ksu_is_allow_uid(current_uid().val)))
 +		return false;
 +
@@ -1176,61 +1251,27 @@ index e1efb073..fe8ec7b6 100644
 +		return false;
 +
 +	return true;
-+}
-+
-+static int ksu_sucompat_user_common(const char __user **filename_user,
-+									const char *syscall_name,
-+									const bool escalate)
- {
- 	const char su[] = SU_PATH;
- 
--	if (!ksu_is_allow_uid(current_uid().val)) {
-+	char path[sizeof(su) + 1];
-+	if (ksu_copy_from_user_retry(path, *filename_user, sizeof(path)))
- 		return 0;
--	}
- 
--	char path[sizeof(su) + 1];
--	memset(path, 0, sizeof(path));
--	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-+	path[sizeof(path) - 1] = '\0';
- 
--	if (unlikely(!memcmp(path, su, sizeof(su)))) {
--		pr_info("faccessat su->sh!\n");
-+	if (memcmp(path, su, sizeof(su)))
-+		return 0;
-+
-+	if (escalate) {
-+		pr_info("%s su found\n", syscall_name);
-+		*filename_user = ksud_user_path();
-+		escape_to_root();
-+	} else {
-+		pr_info("%s su->sh!\n", syscall_name);
- 		*filename_user = sh_user_path();
- 	}
- 
- 	return 0;
  }
  
 -int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
-+// sys_faccessat
-+int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-+			 int *__unused_flags)
++static int ksu_sucompat_user_common(const char __user **filename_user,
++				const char *syscall_name,
++				const bool escalate)
  {
- 	// const char sh[] = SH_PATH;
--	const char su[] = SU_PATH;
-+	// const char su[] = SU_PATH;
+-	// const char sh[] = SH_PATH;
+ 	const char su[] = SU_PATH;
  
 -	if (!ksu_is_allow_uid(current_uid().val)) {
-+	if (!is_su_allowed((const void *)filename_user))
++	char path[sizeof(su)]; // sizeof includes nullterm already!
++	long len = ksu_strncpy_from_user_retry(path, *filename_user, sizeof(path));
++	if (len <= 0) // sizeof(su) is not zero
  		return 0;
 -	}
  
 -	if (unlikely(!filename_user)) {
 -		return 0;
 -	}
-+	return ksu_sucompat_user_common(filename_user, "faccessat", false);
-+}
++	path[sizeof(path) - 1] = '\0';
  
 -	char path[sizeof(su) + 1];
 -	memset(path, 0, sizeof(path));
@@ -1244,10 +1285,7 @@ index e1efb073..fe8ec7b6 100644
 -		return 0;
 -	}
 -	if (likely(memcmp(filename->name, su, sizeof(su))))
-+// sys_newfstatat, sys_fstat64
-+int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
-+{
-+	if (!is_su_allowed((const void *)filename_user))
++	if (memcmp(path, su, sizeof(su)))
  		return 0;
 -	pr_info("vfs_statx su->sh!\n");
 -	memcpy((void *)filename->name, sh, sizeof(sh));
@@ -1256,26 +1294,54 @@ index e1efb073..fe8ec7b6 100644
  
 -	if (unlikely(!memcmp(path, su, sizeof(su)))) {
 -		pr_info("newfstatat su->sh!\n");
--		*filename_user = sh_user_path();
--	}
++	if (escalate) {
++		pr_info("%s su found\n", syscall_name);
++		*filename_user = ksud_user_path();
++		escape_to_root(); // escalate !!
++	} else {
++		pr_info("%s su->sh!\n", syscall_name);
+ 		*filename_user = sh_user_path();
+ 	}
 -#endif
+ 
+ 	return 0;
+ }
+ 
++
++// sys_faccessat
++int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++			 int *__unused_flags)
++{
++	if (!is_su_allowed((const void *)filename_user))
++		return 0;
++
++	return ksu_sucompat_user_common(filename_user, "faccessat", false);
++}
++
++// sys_newfstatat, sys_fstat64
++int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
++{
++	if (!is_su_allowed((const void *)filename_user))
++		return 0;
++
 +	return ksu_sucompat_user_common(filename_user, "newfstatat", false);
 +}
 +
 +// sys_execve, compat_sys_execve
 +int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
-+			       void *__never_use_argv, void *__never_use_envp,
-+			       int *__never_use_flags)
++					void *__never_use_argv, void *__never_use_envp,
++					int *__never_use_flags)
 +{
 +	if (!is_su_allowed((const void *)filename_user))
 +		return 0;
- 
- 	return 0;
++
 +	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
- }
- 
++}
++
  // the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
-@@ -115,7 +132,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+ 				 void *__never_use_argv, void *__never_use_envp,
+@@ -115,7 +142,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
  	const char sh[] = KSUD_PATH;
  	const char su[] = SU_PATH;
  
@@ -1284,7 +1350,7 @@ index e1efb073..fe8ec7b6 100644
  		return 0;
  
  	filename = *filename_ptr;
-@@ -126,9 +143,6 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+@@ -126,9 +153,6 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
  	if (likely(memcmp(filename->name, su, sizeof(su))))
  		return 0;
  
@@ -1294,43 +1360,50 @@ index e1efb073..fe8ec7b6 100644
  	pr_info("do_execveat_common su found\n");
  	memcpy((void *)filename->name, sh, sizeof(sh));
  
-@@ -137,115 +151,49 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+@@ -137,115 +161,38 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
  	return 0;
  }
  
 -int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 -			       void *__never_use_argv, void *__never_use_envp,
 -			       int *__never_use_flags)
-+int ksu_handle_devpts(struct inode *inode)
++int __ksu_handle_devpts(struct inode *inode)
  {
 -	const char su[] = SU_PATH;
 -	char path[sizeof(su) + 1];
--
++	barrier();
+ 
 -	if (unlikely(!filename_user))
--		return 0;
--
++	if (!current->mm) {
+ 		return 0;
++	}
+ 
 -	memset(path, 0, sizeof(path));
 -	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
 -
 -	if (likely(memcmp(path, su, sizeof(su))))
--		return 0;
--
++	uid_t uid = current_uid().val;
++	if (uid % 100000 < 10000) {
++		// not untrusted_app, ignore it
+ 		return 0;
++	}
+ 
 -	if (!ksu_is_allow_uid(current_uid().val))
--		return 0;
--
++	if (!ksu_is_allow_uid(uid))
+ 		return 0;
+ 
 -	pr_info("sys_execve su found\n");
 -	*filename_user = ksud_user_path();
 -
 -	escape_to_root();
 -
- 	return 0;
- }
- 
+-	return 0;
+-}
+-
 -#ifdef CONFIG_KPROBES
 -
 -static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
-+int __ksu_handle_devpts(struct inode *inode)
- {
+-{
 -	struct pt_regs *real_regs = PT_REAL_REGS(regs);
 -	int *dfd = (int *)&PT_REGS_PARM1(real_regs);
 -	const char __user **filename_user =
@@ -1347,33 +1420,20 @@ index e1efb073..fe8ec7b6 100644
 -	const char __user **filename_user =
 -		(const char **)&PT_REGS_PARM2(real_regs);
 -	int *flags = (int *)&PT_REGS_SYSCALL_PARM4(real_regs);
-+	barrier();
-+	if (!ksu_sucompat_integrated)
-+		return 0;
- 
+-
 -	return ksu_handle_stat(dfd, filename_user, flags);
 -}
-+	if (!current->mm) {
-+		return 0;
-+	}
- 
+-
 -static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 -{
 -	struct pt_regs *real_regs = PT_REAL_REGS(regs);
 -	const char __user **filename_user =
 -		(const char **)&PT_REGS_PARM1(real_regs);
-+	uid_t uid = current_uid().val;
-+	if (uid % 100000 < 10000) {
-+		// not untrusted_app, ignore it
-+		return 0;
-+	}
- 
+-
 -	return ksu_handle_execve_sucompat(AT_FDCWD, filename_user, NULL, NULL,
 -					  NULL);
 -}
-+	if (!ksu_is_allow_uid(uid))
-+		return 0;
- 
+-
 -static struct kprobe *init_kprobe(const char *name,
 -				  kprobe_pre_handler_t handler)
 -{
@@ -1421,8 +1481,6 @@ index e1efb073..fe8ec7b6 100644
 -	su_kps[1] = init_kprobe(SYS_FACCESSAT_SYMBOL, faccessat_handler_pre);
 -	su_kps[2] = init_kprobe(SYS_NEWFSTATAT_SYMBOL, newfstatat_handler_pre);
 -#endif
-+	ksu_sucompat_integrated = true;
-+	pr_info("ksu_sucompat_init: hooks enabled: execve/execveat_su, faccessat, stat, devpts\n");
  }
  
  void ksu_sucompat_exit()
@@ -1432,6 +1490,4 @@ index e1efb073..fe8ec7b6 100644
 -		destroy_kprobe(&su_kps[i]);
 -	}
 -#endif
-+	ksu_sucompat_integrated = false;
-+	pr_info("ksu_sucompat_exit: hooks disabled: execve/execveat_su, faccessat, stat, devpts\n");
  }
