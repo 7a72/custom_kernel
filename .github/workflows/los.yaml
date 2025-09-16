@@ -98,18 +98,18 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
-          # curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
-          # cd ./KernelSU/
-          # KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
-          # echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          # sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          
-          # cp $GITHUB_WORKSPACE/patches/vfs_kernelsu.patch .
-          # patch -p1 < vfs_kernelsu.patch
-          cd ./common/
-          cp $GITHUB_WORKSPACE/patches/vfs_kernel.patch .
-          patch -p1 < vfs_kernel.patch
+          # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
+          curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
+          cd ./KernelSU/
+          KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+          git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
+          cp $GITHUB_WORKSPACE/patches/kernelnosu.patch .
+          patch -p1 < kernelnosu.patch
+          #cd ./common/
+          #cp $GITHUB_WORKSPACE/patches/vfs_kernel.patch .
+          #patch -p1 < vfs_kernel.patch
 
       - name: Add Configuration Settings
         run: |
