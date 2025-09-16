@@ -104,11 +104,9 @@ jobs:
           KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          wget https://github.com/backslashxx/KernelSU/commit/5084a80ec4b6de56ea080628af5de15a54d8fea9.patch
           
           cp $GITHUB_WORKSPACE/patches/vfs_kernelsu.patch .
           patch -p1 < vfs_kernelsu.patch
-          patch -p1 < 5084a80ec4b6de56ea080628af5de15a54d8fea9.patch
           cd ../common/
           cp $GITHUB_WORKSPACE/patches/vfs_kernel.patch .
           patch -p1 < vfs_kernel.patch
