@@ -1185,7 +1185,7 @@ index cc2df24..7fff480 100644
 +
  #endif
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index e1efb07..de36cbb 100644
+index e1efb07..200b570 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
 @@ -4,15 +4,14 @@
@@ -1282,11 +1282,11 @@ index e1efb07..de36cbb 100644
 -	const char sh[] = SH_PATH;
 -	struct filename *filename = *((struct filename **)filename_user);
 -	if (IS_ERR(filename)) {
--		return 0;
--	}
--	if (likely(memcmp(filename->name, su, sizeof(su))))
 +	if (memcmp(path, su, sizeof(su)))
  		return 0;
+-	}
+-	if (likely(memcmp(filename->name, su, sizeof(su))))
+-		return 0;
 -	pr_info("vfs_statx su->sh!\n");
 -	memcpy((void *)filename->name, sh, sizeof(sh));
 -#else
@@ -1360,7 +1360,7 @@ index e1efb07..de36cbb 100644
  	pr_info("do_execveat_common su found\n");
  	memcpy((void *)filename->name, sh, sizeof(sh));
  
-@@ -137,115 +161,38 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+@@ -137,115 +161,35 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
  	return 0;
  }
  
@@ -1389,17 +1389,20 @@ index e1efb07..de36cbb 100644
 +	}
  
 -	if (!ksu_is_allow_uid(current_uid().val))
-+	if (!ksu_is_allow_uid(uid))
++	if (likely(!ksu_is_allow_uid(uid)))
  		return 0;
  
 -	pr_info("sys_execve su found\n");
 -	*filename_user = ksud_user_path();
 -
 -	escape_to_root();
--
--	return 0;
--}
--
++	struct inode_security_struct *sec = selinux_inode(inode);
++	if (ksu_devpts_sid && sec)
++		sec->sid = ksu_devpts_sid;
+ 
+ 	return 0;
+ }
+ 
 -#ifdef CONFIG_KPROBES
 -
 -static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -1448,13 +1451,8 @@ index e1efb07..de36cbb 100644
 -	if (ret) {
 -		kfree(kp);
 -		return NULL;
-+	if (ksu_devpts_sid) {
-+		struct inode_security_struct *sec = selinux_inode(inode);
-+		if (sec) {
-+			sec->sid = ksu_devpts_sid;
-+		}
- 	}
- 
+-	}
+-
 -	return kp;
 -}
 -
@@ -1467,9 +1465,8 @@ index e1efb07..de36cbb 100644
 -	synchronize_rcu();
 -	kfree(kp);
 -	*kp_ptr = NULL;
-+	return 0;
- }
- 
+-}
+-
 -static struct kprobe *su_kps[3];
 -#endif
 -
