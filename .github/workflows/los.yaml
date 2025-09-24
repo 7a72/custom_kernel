@@ -92,19 +92,19 @@ jobs:
           # sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
           # sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"clang-r536225"/' scripts/mkcompile_h || true
 
-     # - name: Add KernelSU
-     #   run: |
-     #     echo "Changing to directory: /mnt/kernel_workspace..."
-     #     cd "/mnt/kernel_workspace"
-     #     
-     #     echo "Adding KernelSU..."
-     #     # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
-     #     curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
-     #     cd ./KernelSU/
-     #     KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
-     #     echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-     #     sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-     #     git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
+      # - name: Add KernelSU
+      #   run: |
+      #     echo "Changing to directory: /mnt/kernel_workspace..."
+      #     cd "/mnt/kernel_workspace"
+      #     
+      #     echo "Adding KernelSU..."
+      #     # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
+      #     curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
+      #     cd ./KernelSU/
+      #     KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
+      #     echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+      #     sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+      #     git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
 
       - name: Add SukiSU
         run: |
@@ -146,6 +146,11 @@ jobs:
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
           echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ${KCONFIG}
           echo "CONFIG_MODULE_FORCE_LOAD=y" >> ${KCONFIG}
+          echo "CONFIG_PID_NS=y" >> ${KCONFIG}
+          echo "CONFIG_POSIX_MQUEUE=y" >> ${KCONFIG}
+          echo "CONFIG_IPC_NS=y" >> ${KCONFIG}
+          echo "CONFIG_USER_NS=y" >> ${KCONFIG}
+          echo "CONFIG_BPF_STREAM_PARSER=y" >> ${KCONFIG}
 
       - name: Build the Kernel
         run: |
