@@ -1,0 +1,40 @@
+From 9be6c39b7e6012186bfe258d0993478b4a14a644 Mon Sep 17 00:00:00 2001
+From: 7a72 <git@zrlab.org>
+Date: Wed, 24 Sep 2025 03:20:52 +0000
+Subject: [PATCH] kernel: module: Ignore modversions, vermagic and symbol CRC
+ checks
+
+- Force load_module() to skip modversions and vermagic checks.
+- Make check_version() ignore symbol CRC mismatches.
+---
+ kernel/module/main.c    | 3 +++
+ kernel/module/version.c | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/kernel/module/main.c b/kernel/module/main.c
+index 13ca819e3943a..4e4b490e81074 100644
+--- a/kernel/module/main.c
++++ b/kernel/module/main.c
+@@ -2747,6 +2747,9 @@ static int load_module(struct load_info *info, const char __user *uargs,
+ 	long err = 0;
+ 	char *after_dashes;
+ 
++	flags |= MODULE_INIT_IGNORE_MODVERSIONS;
++	flags |= MODULE_INIT_IGNORE_VERMAGIC;
++
+ 	/*
+ 	 * Do the signature check (if any) first. All that
+ 	 * the signature check needs is info->len, it does
+diff --git a/kernel/module/version.c b/kernel/module/version.c
+index 53f43ac5a73e9..56a6c6bf1f7b4 100644
+--- a/kernel/module/version.c
++++ b/kernel/module/version.c
+@@ -52,7 +52,7 @@ int check_version(const struct load_info *info,
+ 
+ bad_version:
+ 	pr_warn("%s: disagrees about version of symbol %s\n", info->name, symname);
+-	return 0;
++	return 1;
+ }
+ 
+ int check_modstruct_version(const struct load_info *info,
