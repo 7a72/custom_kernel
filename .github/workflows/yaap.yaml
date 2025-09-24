@@ -1,13 +1,24 @@
-name: Build Kernel using yaap Source with mksu
+name: Build Kernel using yaap Source
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-kernel-with-mksu:
+  build-kernel:
     runs-on: ubuntu-latest
+    env:
+      KERNEL_WORKSPACE: "/mnt/kernel_workspace"
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Ccache
+        uses: hendrikmuhs/ccache-action@v1.2.18
+        with:
+          key: ccache-${{ runner.os }}-build-yaap
+          max-size: 4G
+
       - name: Set Swap
         run: |
           export SWAP_FILE=$(swapon --show=NAME | tail -n 1)
@@ -23,7 +34,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3 git libelf-dev dwarves
+          sudo apt install -y python3 git libelf-dev dwarves ccache
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /bin/repo
@@ -33,21 +44,32 @@ jobs:
           echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
           echo "KBUILD_BUILD_USER=7a72" >> $GITHUB_ENV
           echo "KBUILD_BUILD_HOST=action" >> $GITHUB_ENV
+          
           sudo mkdir -p /mnt/kernel_workspace
           sudo chmod 0777 /mnt/kernel_workspace
+          
+          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
           
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
 
+      - name: Restore Pre-built Toolchain
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: toolchain-${{ runner.os }}-r547379
+
       - name: Download the Pre-built Toolchain
         run: |
-          echo "Changing to directory: /mnt/kernel_workspace..."
-          cd "/mnt/kernel_workspace"
-          mkdir toolchain
-          cd toolchain
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
-          tar axf clang-r547379.tar.gz 
-          rm clang-r547379.tar.gz 
+          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.installed"
+          if [ ! -f "$INSTALLED" ]; then
+            mkdir -p ${{ env.TOOLCHAIN_DIR }}
+            cd ${{ env.TOOLCHAIN_DIR }}
+            wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
+            tar axf clang-r547379.tar.gz 
+            rm clang-r547379.tar.gz 
+            touch "$INSTALLED"
+          fi
 
       - name: Sync the Kernel Source Code
         run: |
@@ -55,75 +77,68 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Sync kernel source"
-          git clone --depth=1 https://github.com/7a72/kernel_oneplus_waffle.git -b waffle kernel
-          # git clone --depth=1 https://github.com/OnePlus-12-Development/android_kernel_oneplus_sm8650 -b lineage-22.2 kernel
-          cd kernel
+          git clone --depth=1 https://github.com/7a72/kernel_oneplus_waffle.git -b waffle common
+          
+          echo "Get kernel version"
+          cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
+          echo KVER=$(cat ./kver) >> $GITHUB_ENV
+          
+          cd common
           
           echo "Pre-modify"
           rm -rf ./android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i 's/check_defconfig//' build.config.gki || true
-          sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
-          sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"0x$KBUILD_BUILD_USER"/' scripts/mkcompile_h || true
-          wget https://raw.githubusercontent.com/7a72/custom_kernel/refs/heads/main/patches/rekernel_6_1.patch
-          patch -p1 < rekernel_6_1.patch
+          # sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
+          # sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"clang-r536225"/' scripts/mkcompile_h || true
 
       - name: Add KernelSU
         run: |
-          echo "Changing to directory: /mnt/kernel_workspace/kernel..."
-          cd "/mnt/kernel_workspace/kernel"
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/magic/kernel/setup.sh" | bash -s magic
           curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
           cd ./KernelSU/
           KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          
-          echo "Reverting commit"
           git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
 
       - name: Add Configuration Settings
         run: |
-          echo "Changing to directory: /mnt/kernel_workspace/kernel..."
-          cd "/mnt/kernel_workspace/kernel"
+          echo "Changing to directory: /mnt/kernel_workspace/common..."
+          cd "/mnt/kernel_workspace/common"
 
-          # echo "Adding configuration settings to gki_defconfig..."
-          # echo "CONFIG_KSU=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_PID_NS=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_POSIX_MQUEUE=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_IPC_NS=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_USER_NS=y" >> ./arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_BPF_STREAM_PARSER=y" >> ./arch/arm64/configs/gki_defconfig
-          echo "CONFIG_REKERNEL=y" >> ./arch/arm64/configs/gki_defconfig
-          
-          # cat ./arch/arm64/configs/gki_defconfig
+          # echo "Adding configuration settings to defconfig..."
+          # KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
 
       - name: Build the Kernel
         run: |
-          echo "Changing to configuration directory: /mnt/kernel_workspace/kernel..."
-          cd "/mnt/kernel_workspace/kernel"
+          echo "Changing to configuration directory: /mnt/kernel_workspace/common..."
+          cd "/mnt/kernel_workspace/common"
           
           # echo "Clean dirty"
           # git add -A
           # git commit -s -a -m "build"
           
-          export PATH=/mnt/kernel_workspace/toolchain/bin:$PATH
-          type clang
+          export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           
           echo "Building the kernel..."
-          # python3 build_with_bazel.py -t pineapple gki --config=${{ github.event.inputs.CONFIG }} --lto=${{ github.event.inputs.LTO }} -o "$(pwd)/../out"
           
-          kargs="ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
-          make $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/oplus/waffle.config # Build the kernel config
-          # make $kargs zsck_waffle_defconfig
-          make $kargs # Build the kernel itself
-          make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules to out/Kernel_Prebuilts/lib/modules
-          make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees to ./Kernel_Prebuilts/boot hopefully
-          make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers to out/Kernel_Prebuilts/usr
-          pwd
-          ls
-          cp ./out/arch/arm64/boot/Image /mnt/kernel_workspace/Image
+          kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
+          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          make CC="ccache clang" $kargs # Build the kernel itself
+          
+          # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
+          # make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
+          # make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers
+
+      # - name: Upload Kernel_Prebuilts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Kernel_Prebuilts
+      #     path: /mnt/kernel_workspace/Kernel_Prebuilts/*
 
       - name: Create AnyKernel3
         run: |
@@ -133,16 +148,10 @@ jobs:
           git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
           
           echo "Copying Image"
-          cp /mnt/kernel_workspace/Image ./AnyKernel3/Image
+          cp /mnt/kernel_workspace/common/out/arch/arm64/boot/Image ./AnyKernel3/Image
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-OP12-6.1-MKSU-${{ env.KSUVER }}-${{ env.BUILD_TIME }}
+          name: AnyKernel3-OP12-yaap-${{ env.KVER }}_${{ env.BUILD_TIME }}
           path: /mnt/kernel_workspace/AnyKernel3/*
-
-      - name: Upload Image
-        uses: actions/upload-artifact@v4
-        with:
-          name: Image-${{ env.BUILD_TIME }}
-          path: /mnt/kernel_workspace/Image
