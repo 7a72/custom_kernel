@@ -92,32 +92,60 @@ jobs:
           # sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
           # sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"clang-r536225"/' scripts/mkcompile_h || true
 
-      - name: Add KernelSU
+     # - name: Add KernelSU
+     #   run: |
+     #     echo "Changing to directory: /mnt/kernel_workspace..."
+     #     cd "/mnt/kernel_workspace"
+     #     
+     #     echo "Adding KernelSU..."
+     #     # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
+     #     curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
+     #     cd ./KernelSU/
+     #     KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
+     #     echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+     #     sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+     #     git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
+
+      - name: Add SukiSU
         run: |
           echo "Changing to directory: /mnt/kernel_workspace..."
           cd "/mnt/kernel_workspace"
           
-          echo "Adding KernelSU..."
-          # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
-          curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
-          cd ./KernelSU/
-          KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
+          echo "Adding SukiSU..."
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/refs/heads/main/kernel/setup.sh" | bash -s susfs-main
+          cd ./KernelSU
+          KSU_VERSION=$(expr $(git rev-list --count main) + 10700 2>/dev/null || echo 11111)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
-          cp $GITHUB_WORKSPACE/patches/kernelnosu.patch .
-          patch -p1 < kernelnosu.patch
-          #cd ./common/
-          #cp $GITHUB_WORKSPACE/patches/vfs_kernel.patch .
-          #patch -p1 < vfs_kernel.patch
+
+      - name: Apply patches
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          
+          git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android14-6.1
+          git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
+          cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+          cp ./SukiSU_patch/hooks/syscall_hooks.patch ./common/
+          cp ./SukiSU_patch/69_hide_stuff.patch ./common/
+          cd ./common
+          cp $GITHUB_WORKSPACE/patches/module_load.patch .
+          patch -p1 < module_load.patch
+          patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch
+          patch -p1 < syscall_hooks.patch
+          patch -p1 < 69_hide_stuff.patch
 
       - name: Add Configuration Settings
         run: |
           echo "Changing to directory: /mnt/kernel_workspace/common..."
           cd "/mnt/kernel_workspace/common"
 
-          # echo "Adding configuration settings to defconfig..."
-          # KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
+          echo "Adding configuration settings to defconfig..."
+          KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ${KCONFIG}
+          echo "CONFIG_MODULE_FORCE_LOAD=y" >> ${KCONFIG}
 
       - name: Build the Kernel
         run: |
