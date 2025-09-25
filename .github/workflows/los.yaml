@@ -98,7 +98,6 @@ jobs:
       #     cd "/mnt/kernel_workspace"
       #     
       #     echo "Adding KernelSU..."
-      #     # curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s magic
       #     curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
       #     cd ./KernelSU/
       #     KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
@@ -151,8 +150,6 @@ jobs:
           echo "CONFIG_IPC_NS=y" >> ${KCONFIG}
           echo "CONFIG_USER_NS=y" >> ${KCONFIG}
           echo "CONFIG_BPF_STREAM_PARSER=y" >> ${KCONFIG}
-          echo "CONFIG_CGROUP_DEVICE=y" >> ${KCONFIG}
-          
 
       - name: Build the Kernel
         run: |
