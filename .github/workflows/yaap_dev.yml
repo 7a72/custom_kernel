@@ -1,4 +1,4 @@
-name: Build Kernel using yaap Source
+name: yaap dev
 
 on:
   workflow_dispatch:
