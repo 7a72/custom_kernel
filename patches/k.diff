@@ -164,7 +164,7 @@ index 00000000..c639dc62
 +{
 +	pr_info("rp_sucompat: unregister getname_flags!\n");
 +	destroy_kretprobe(&getname_rp);
-+	return 0;
++	// return 0;
 +}
 +
 +void rp_sucompat_init()
