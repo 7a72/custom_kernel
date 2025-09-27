@@ -1,4 +1,4 @@
-name: yaap dev
+name: Build Kernel using yaap Source
 
 on:
   workflow_dispatch:
@@ -112,6 +112,28 @@ jobs:
           # echo "Adding configuration settings to defconfig..."
           # KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
 
+      - name: Apply Patches
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          
+          git clone https://gitlab.com/pershoot/susfs4ksu.git -b gki-android14-6.1-lts-dev
+          echo "Applying core SUSFS patches..."
+          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common
+          cp susfs4ksu/kernel_patches/60_scope-minimized_manual_hooks.patch ./common
+          cp susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+          cd ./common
+          cp $GITHUB_WORKSPACE/patches/hide_lineage.patch .
+          patch -p1 < hide_lineage.patch
+          patch -p1 --forward < 50_add_susfs_in_gki-android14-6.1.patch
+          patch -p1 --forward < 60_scope-minimized_manual_hooks.patch
+          
+          cd ../KernelSU
+          echo "Apply KSU integration patches"
+          cp $GITHUB_WORKSPACE/patches/mksu_susfs.patch .
+          patch -p1 < mksu_susfs.patch
+
       - name: Build the Kernel
         run: |
           echo "Changing to configuration directory: /mnt/kernel_workspace/common..."
@@ -155,4 +177,3 @@ jobs:
         with:
           name: AnyKernel3-OP12-yaap-${{ env.KVER }}_${{ env.BUILD_TIME }}
           path: /mnt/kernel_workspace/AnyKernel3/*
-  
