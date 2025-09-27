@@ -1,4 +1,4 @@
-name: yaap dev
+name: yaap_dev
 
 on:
   workflow_dispatch:
@@ -97,44 +97,22 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          # curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
-          curl -LSs "https://raw.githubusercontent.com/KOWX712/KernelSU/master/kernel/setup.sh" | bash -
+          curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
           cd ./KernelSU/
           KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          # sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          # git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
-
-      - name: Apply Patches
-        run: |
-          echo "Changing to directory: /mnt/kernel_workspace..."
-          cd "/mnt/kernel_workspace"
-          
-          git clone https://gitlab.com/pershoot/susfs4ksu.git -b gki-android14-6.1-lts-dev
-          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common
-          cp susfs4ksu/kernel_patches/fs/* ./common/fs/
-          cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          cp susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU
-          echo "Applying SUSFS patches..."
-          cd ./common
-          cp $GITHUB_WORKSPACE/patches/hide_lineage.patch .
-          patch -p1 < hide_lineage.patch
-          patch -p1 --forward < 50_add_susfs_in_gki-android14-6.1.patch
-          cp $GITHUB_WORKSPACE/patches/min_scope_syscall_hooks_v1.5.patch .
-          patch -p1 < min_scope_syscall_hooks_v1.5.patch
-          
-          cd ../KernelSU
-          echo "Apply KSU integration patches"
-          patch -p1 --forward < 10_enable_susfs_for_ksu.patch
+          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+          git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
+          cp $GITHUB_WORKSPACE/patches/k1.diff .
+          patch -p1 < k1.diff
 
       - name: Add Configuration Settings
         run: |
           echo "Changing to directory: /mnt/kernel_workspace/common..."
           cd "/mnt/kernel_workspace/common"
 
-          echo "Adding configuration settings to defconfig..."
-          KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
-          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ${KCONFIG}
+          # echo "Adding configuration settings to defconfig..."
+          # KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
 
       - name: Build the Kernel
         run: |
