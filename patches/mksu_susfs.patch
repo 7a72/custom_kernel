@@ -1159,7 +1159,7 @@ index 88f1e7d3..22d4b324 100644
  
  #endif
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index e1efb073..f2ae5a47 100644
+index fdfc0d59..5dcebf1a 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
 @@ -9,6 +9,9 @@
@@ -1317,7 +1317,7 @@ index e1efb073..f2ae5a47 100644
  	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (likely(memcmp(path, su, sizeof(su))))
-@@ -249,3 +284,41 @@ void ksu_sucompat_exit()
+@@ -284,3 +319,41 @@ void ksu_sucompat_exit()
  	}
  #endif
  }
