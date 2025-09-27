@@ -103,8 +103,8 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
           git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
-          cp $GITHUB_WORKSPACE/patches/k1.diff .
-          patch -p1 < k1.diff
+          cp $GITHUB_WORKSPACE/patches/k.diff .
+          patch -p1 < k.diff
 
       - name: Add Configuration Settings
         run: |
