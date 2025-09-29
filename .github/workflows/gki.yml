@@ -57,6 +57,8 @@ jobs:
         KSU_VERSION=$(grep -e "^KSU_VERSION" drivers/kernelsu/Makefile | awk '{print $3}')
         echo "KSU_VERSION: $KSU_VERSION"
         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+        SYMBOL_LIST=./android/abi_gki_aarch64
+        cat ./drivers/kernelsu/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
         echo "oplus"
         cp $GITHUB_WORKSPACE/patches/0002-FROMGIT-treewide-Import-oplus-module.patch .
         patch -p1 < 0002-FROMGIT-treewide-Import-oplus-module.patch
@@ -91,8 +93,9 @@ jobs:
         # echo "CONFIG_BPF_STREAM_PARSER=y" >> ${KCONFIG}
         echo "Remove -dirty"
         sed -i '/stable_scmversion_cmd/s/maybe-dirty/zsck/;s/-$android_release-$KMI_GENERATION//g' ./build/kernel/kleaf/impl/stamp.bzl
+        sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' ./common/BUILD.bazel
         sed -i '2s/check_defconfig//' ./common/build.config.gki
-        echo "" > ./common/android/abi_gki_protected_exports_aarch64
+        rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
 
     - name: Build Kernel
       run: |
