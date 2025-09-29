@@ -92,8 +92,7 @@ jobs:
         echo "Remove -dirty"
         sed -i '/stable_scmversion_cmd/s/maybe-dirty/zsck/;s/-$android_release-$KMI_GENERATION//g' ./build/kernel/kleaf/impl/stamp.bzl
         sed -i '2s/check_defconfig//' ./common/build.config.gki
-        rm -rf ./common/android/abi_gki_protected_exports_aarch64
-        rm -rf ./common/android/abi_gki_protected_exports_x86_64
+        echo "" > ./common/android/abi_gki_protected_exports_aarch64
 
     - name: Build Kernel
       run: |
