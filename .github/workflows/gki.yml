@@ -86,6 +86,7 @@ jobs:
         KCONFIG=/mnt/kernel_workspace/common/arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU=y" >> ${KCONFIG}
         echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+        echo "CONFIG_F2FS_SEQZONE=y" >> ${KCONFIG}
         # echo "CONFIG_PID_NS=y" >> ${KCONFIG}
         # echo "CONFIG_POSIX_MQUEUE=y" >> ${KCONFIG}
         # echo "CONFIG_IPC_NS=y" >> ${KCONFIG}
