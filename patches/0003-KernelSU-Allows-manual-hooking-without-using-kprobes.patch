@@ -1,0 +1,423 @@
+From c6614968fad8afce3db2e127d1d99617a64e2ca8 Mon Sep 17 00:00:00 2001
+From: Pzqqt <821026875@qq.com>
+Date: Wed, 22 Jan 2025 09:49:50 +0800
+Subject: [PATCH 3/3] KernelSU: Allows manual hooking without using kprobes
+
+Some apps will detect that KernelSU uses kprobes and think that the device
+environment is abnormal. Therefore, to avoid being detected, it is best to
+follow the official documentation of KernelSU to manually hook, just like
+doing it on a traditional kernel.
+
+This commit allows us to manually hook while keeping `CONFIG_KPROBES` enabled.
+
+Notes:
+The kernel having kprobes support does not mean that the environment is
+abnormal, because GKI has kprobes support by default, and disabling kprobes
+support will make it impossible to start the device.
+
+Signed-off-by: Pzqqt <821026875@qq.com>
+---
+ drivers/input/input.c        | 11 +++++++++++
+ drivers/kernelsu/Kconfig     |  9 +++++++++
+ drivers/kernelsu/Makefile    | 10 ++++++++++
+ drivers/kernelsu/core_hook.c |  4 ++++
+ drivers/kernelsu/ksu.c       |  6 ++----
+ drivers/kernelsu/ksud.c      | 20 ++++++++++----------
+ drivers/kernelsu/sucompat.c  |  6 +++---
+ fs/devpts/inode.c            |  7 +++++++
+ fs/exec.c                    | 14 ++++++++++++++
+ fs/open.c                    |  9 +++++++++
+ fs/read_write.c              | 11 +++++++++++
+ fs/stat.c                    |  8 ++++++++
+ 12 files changed, 98 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/input/input.c b/drivers/input/input.c
+index 78be582b5..910f84fd7 100644
+--- a/drivers/input/input.c
++++ b/drivers/input/input.c
+@@ -387,6 +387,11 @@ static void input_event_dispose(struct input_dev *dev, int disposition,
+ 	}
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_input_hook __read_mostly;
++extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
++#endif
++
+ void input_handle_event(struct input_dev *dev,
+ 			unsigned int type, unsigned int code, int value)
+ {
+@@ -395,6 +400,12 @@ void input_handle_event(struct input_dev *dev,
+ 	lockdep_assert_held(&dev->event_lock);
+ 
+ 	disposition = input_get_disposition(dev, type, code, &value);
++
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_input_hook))
++		ksu_handle_input_handle_event(&type, &code, &value);
++#endif
++
+ 	if (disposition != INPUT_IGNORE_EVENT) {
+ 		if (type != EV_SYN)
+ 			add_input_randomness(type, code, value);
+diff --git a/drivers/kernelsu/Kconfig b/drivers/kernelsu/Kconfig
+index 67f177f47..ea6178f6a 100644
+--- a/drivers/kernelsu/Kconfig
++++ b/drivers/kernelsu/Kconfig
+@@ -16,4 +16,13 @@ config KSU_DEBUG
+ 	help
+ 	  Enable KernelSU debug mode.
+ 
++config KSU_MANUAL_HOOK
++	bool "Manual hooking without kprobes"
++	depends on KSU && KSU != m
++	depends on KPROBES
++	default n
++	help
++	  Keep KPROBES enabled but do not use KPROBES to implement
++	  the hooks required by KernelSU, but instead hook them manually.
++
+ endmenu
+diff --git a/drivers/kernelsu/Makefile b/drivers/kernelsu/Makefile
+index 8e51c62f0..967b2e267 100644
+--- a/drivers/kernelsu/Makefile
++++ b/drivers/kernelsu/Makefile
+@@ -20,6 +20,16 @@ KSU_VERSION := 12164
+ # $(info -- KernelSU version: $(KSU_VERSION))
+ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+ 
++ifeq ($(CONFIG_KSU_MANUAL_HOOK),y)
++ifeq ($(CONFIG_KSU),m)
++$(error CONFIG_KSU_MANUAL_HOOK cannot be enabled when compiling KernelSU as LKM!)
++endif
++else
++ifeq ($(CONFIG_KPROBES),y)
++ccflags-y += -DKSU_HOOK_WITH_KPROBES
++endif
++endif
++
+ ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
+ ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
+ 
+diff --git a/drivers/kernelsu/core_hook.c b/drivers/kernelsu/core_hook.c
+index a63d34a7e..7f88c0d31 100644
+--- a/drivers/kernelsu/core_hook.c
++++ b/drivers/kernelsu/core_hook.c
+@@ -635,6 +635,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+ 
+ // Init functons
+ 
++#if 0 // Dead code
+ static int handler_pre(struct kprobe *p, struct pt_regs *regs)
+ {
+ 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
+@@ -695,6 +696,7 @@ __maybe_unused int ksu_kprobe_exit(void)
+ 	unregister_kprobe(&renameat_kp);
+ 	return 0;
+ }
++#endif
+ 
+ static int ksu_task_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 			  unsigned long arg4, unsigned long arg5)
+@@ -902,9 +904,11 @@ void __init ksu_core_init(void)
+ 
+ void ksu_core_exit(void)
+ {
++#if 0 // Dead code
+ #ifdef CONFIG_KPROBES
+ 	pr_info("ksu_core_kprobe_exit\n");
+ 	// we dont use this now
+ 	// ksu_kprobe_exit();
+ #endif
++#endif
+ }
+diff --git a/drivers/kernelsu/ksu.c b/drivers/kernelsu/ksu.c
+index d517c3b54..991922dd5 100644
+--- a/drivers/kernelsu/ksu.c
++++ b/drivers/kernelsu/ksu.c
+@@ -57,11 +57,9 @@ int __init kernelsu_init(void)
+ 
+ 	ksu_throne_tracker_init();
+ 
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	ksu_sucompat_init();
+ 	ksu_ksud_init();
+-#else
+-	pr_alert("KPROBES is disabled, KernelSU may not work, please check https://kernelsu.org/guide/how-to-integrate-for-non-gki.html");
+ #endif
+ 
+ #ifdef MODULE
+@@ -80,7 +78,7 @@ void kernelsu_exit(void)
+ 
+ 	destroy_workqueue(ksu_workqueue);
+ 
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	ksu_ksud_exit();
+ 	ksu_sucompat_exit();
+ #endif
+diff --git a/drivers/kernelsu/ksud.c b/drivers/kernelsu/ksud.c
+index 98fee107b..63c8fbdc9 100644
+--- a/drivers/kernelsu/ksud.c
++++ b/drivers/kernelsu/ksud.c
+@@ -47,7 +47,7 @@ static void stop_vfs_read_hook();
+ static void stop_execve_hook();
+ static void stop_input_hook();
+ 
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ static struct work_struct stop_vfs_read_work;
+ static struct work_struct stop_execve_hook_work;
+ static struct work_struct stop_input_hook_work;
+@@ -150,7 +150,7 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
+ 			     struct user_arg_ptr *argv,
+ 			     struct user_arg_ptr *envp, int *flags)
+ {
+-#ifndef CONFIG_KPROBES
++#ifndef KSU_HOOK_WITH_KPROBES
+ 	if (!ksu_execveat_hook) {
+ 		return 0;
+ 	}
+@@ -306,7 +306,7 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
+ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
+ 			size_t *count_ptr, loff_t **pos)
+ {
+-#ifndef CONFIG_KPROBES
++#ifndef KSU_HOOK_WITH_KPROBES
+ 	if (!ksu_vfs_read_hook) {
+ 		return 0;
+ 	}
+@@ -419,7 +419,7 @@ static bool is_volumedown_enough(unsigned int count)
+ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
+ 				  int *value)
+ {
+-#ifndef CONFIG_KPROBES
++#ifndef KSU_HOOK_WITH_KPROBES
+ 	if (!ksu_input_hook) {
+ 		return 0;
+ 	}
+@@ -461,7 +461,7 @@ bool ksu_is_safe_mode()
+ 	return false;
+ }
+ 
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 
+ static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
+ {
+@@ -539,7 +539,7 @@ static void do_stop_input_hook(struct work_struct *work)
+ 
+ static void stop_vfs_read_hook()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	bool ret = schedule_work(&stop_vfs_read_work);
+ 	pr_info("unregister vfs_read kprobe: %d!\n", ret);
+ #else
+@@ -550,7 +550,7 @@ static void stop_vfs_read_hook()
+ 
+ static void stop_execve_hook()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	bool ret = schedule_work(&stop_execve_hook_work);
+ 	pr_info("unregister execve kprobe: %d!\n", ret);
+ #else
+@@ -566,7 +566,7 @@ static void stop_input_hook()
+ 		return;
+ 	}
+ 	input_hook_stopped = true;
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	bool ret = schedule_work(&stop_input_hook_work);
+ 	pr_info("unregister input kprobe: %d!\n", ret);
+ #else
+@@ -578,7 +578,7 @@ static void stop_input_hook()
+ // ksud: module support
+ void ksu_ksud_init()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	int ret;
+ 
+ 	ret = register_kprobe(&execve_kp);
+@@ -598,7 +598,7 @@ void ksu_ksud_init()
+ 
+ void ksu_ksud_exit()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	unregister_kprobe(&execve_kp);
+ 	// this should be done before unregister vfs_read_kp
+ 	// unregister_kprobe(&vfs_read_kp);
+diff --git a/drivers/kernelsu/sucompat.c b/drivers/kernelsu/sucompat.c
+index 1c578c95c..e8d8329ac 100644
+--- a/drivers/kernelsu/sucompat.c
++++ b/drivers/kernelsu/sucompat.c
+@@ -189,7 +189,7 @@ int ksu_handle_devpts(struct inode *inode)
+ 	return 0;
+ }
+ 
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 
+ static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
+ {
+@@ -268,7 +268,7 @@ static struct kprobe *su_kps[4];
+ // sucompat: permited process can execute 'su' to gain root access.
+ void ksu_sucompat_init()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	su_kps[0] = init_kprobe(SYS_EXECVE_SYMBOL, execve_handler_pre);
+ 	su_kps[1] = init_kprobe(SYS_FACCESSAT_SYMBOL, faccessat_handler_pre);
+ 	su_kps[2] = init_kprobe(SYS_NEWFSTATAT_SYMBOL, newfstatat_handler_pre);
+@@ -278,7 +278,7 @@ void ksu_sucompat_init()
+ 
+ void ksu_sucompat_exit()
+ {
+-#ifdef CONFIG_KPROBES
++#ifdef KSU_HOOK_WITH_KPROBES
+ 	for (int i = 0; i < ARRAY_SIZE(su_kps); i++) {
+ 		destroy_kprobe(&su_kps[i]);
+ 	}
+diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
+index 4f25015aa..e984a329b 100644
+--- a/fs/devpts/inode.c
++++ b/fs/devpts/inode.c
+@@ -596,6 +596,10 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+ 	return dentry;
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_devpts(struct inode*);
++#endif
++
+ /**
+  * devpts_get_priv -- get private data for a slave
+  * @pts_inode: inode of the slave
+@@ -604,6 +608,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+  */
+ void *devpts_get_priv(struct dentry *dentry)
+ {
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_devpts(dentry->d_inode);
++#endif
+ 	if (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)
+ 		return NULL;
+ 	return dentry->d_fsdata;
+diff --git a/fs/exec.c b/fs/exec.c
+index 05ec9e696..807ade718 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1878,6 +1878,13 @@ static int bprm_execve(struct linux_binprm *bprm,
+ 
+ 	return retval;
+ }
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_execveat_hook __read_mostly;
++extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
++                               void *envp, int *flags);
++extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
++                                        void *argv, void *envp, int *flags);
++#endif
+ 
+ static int do_execveat_common(int fd, struct filename *filename,
+ 			      struct user_arg_ptr argv,
+@@ -1887,6 +1894,13 @@ static int do_execveat_common(int fd, struct filename *filename,
+ 	struct linux_binprm *bprm;
+ 	int retval;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_execveat_hook))
++		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++	else
++		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
++#endif
++
+ 	if (IS_ERR(filename))
+ 		return PTR_ERR(filename);
+ 
+diff --git a/fs/open.c b/fs/open.c
+index 026a4047c..bcb117c22 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -338,6 +338,11 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
+ }
+ EXPORT_SYMBOL_GPL(vfs_fallocate);
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++                                int *flags);
++#endif
++
+ int ksys_fallocate(int fd, int mode, loff_t offset, loff_t len)
+ {
+ 	struct fd f = fdget(fd);
+@@ -426,6 +431,10 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW;
+ 	const struct cred *old_cred = NULL;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
++#endif
++
+ 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+ 		return -EINVAL;
+ 
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 7a2ff6157..e7432affc 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -447,10 +447,21 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+ }
+ EXPORT_SYMBOL(kernel_read);
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_vfs_read_hook __read_mostly;
++extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
++                               size_t *count_ptr, loff_t **pos);
++#endif
++
+ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ {
+ 	ssize_t ret;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_vfs_read_hook))
++		ksu_handle_vfs_read(&file, &buf, &count, &pos);
++#endif
++
+ 	if (!(file->f_mode & FMODE_READ))
+ 		return -EBADF;
+ 	if (!(file->f_mode & FMODE_CAN_READ))
+diff --git a/fs/stat.c b/fs/stat.c
+index ef50573c7..1f9095874 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -199,6 +199,10 @@ int getname_statx_lookup_flags(int flags)
+ 	return lookup_flags;
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#endif
++
+ /**
+  * vfs_statx - Get basic and extra attributes by filename
+  * @dfd: A file descriptor representing the base dir for a relative filename
+@@ -221,6 +225,10 @@ static int vfs_statx(int dfd, struct filename *filename, int flags,
+ 	unsigned int lookup_flags = getname_statx_lookup_flags(flags);
+ 	int error;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_stat(&dfd, (const char __user **)&filename, &flags);
++#endif
++
+ 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
+ 		      AT_STATX_SYNC_TYPE))
+ 		return -EINVAL;
+-- 
+2.51.0
+
