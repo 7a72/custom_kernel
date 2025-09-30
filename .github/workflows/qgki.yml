@@ -1,120 +1,176 @@
-name: Build Kernel with QGKI
+name: Build Kernel QGKI
+
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Kernel with QGKI
+  build-kernel:
     runs-on: ubuntu-latest
+    env:
+      KERNEL_WORKSPACE: "/mnt/kernel_workspace"
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
 
-    - name: Set Swap
-      run: |
-        export SWAP_FILE=$(swapon --show=NAME | tail -n 1)
-        sudo swapoff $SWAP_FILE
-        sudo rm -rf $SWAP_FILE
-        sudo fallocate -l 8G /swap_filex
-        sudo chmod 600 /swap_filex
-        sudo mkswap /swap_filex
-        sudo swapon /swap_filex
-        df -h
-        free -h
+      - name: Ccache
+        uses: hendrikmuhs/ccache-action@v1.2.18
+        with:
+          key: ccache-${{ runner.os }}-q
+          max-size: 4G
 
-    - name: Setup build kernel environment
-      run: |
-        echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
-        sudo apt-get update
-        sudo apt-get install git dwarves libelf-dev ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3
-        curl -so repo https://storage.googleapis.com/git-repo-downloads/repo
-        sudo mv repo /usr/bin
-        sudo chmod +x /usr/bin/repo
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
-        sudo mkdir -p /mnt/kernel_workspace
-        sudo chmod 0777 /mnt/kernel_workspace
-        cd /mnt/kernel_workspace
+      - name: Set Swap
+        run: |
+          export SWAP_FILE=$(swapon --show=NAME | tail -n 1)
+          sudo swapoff $SWAP_FILE
+          sudo rm -rf $SWAP_FILE
+          sudo fallocate -l 16G /swap_filex
+          sudo chmod 600 /swap_filex
+          sudo mkswap /swap_filex
+          sudo swapon /swap_filex
+          df -h
+          free -h
 
-    - name: Download source code
-      run: |
-        cd /mnt/kernel_workspace
-        repo init --depth=1 --u https://git.codelinaro.org/clo/la/kernelplatform/manifest -b AU_LINUX_KERNEL.PLATFORM.3.0.R1.00.00.00.017.125
-        repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3 git libelf-dev dwarves ccache
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /bin/repo
 
-    - name: Patches / Misc
-      run: |
-        cd /mnt/kernel_workspace
-        echo "KSU"
-        # curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-        cd common
-        cp $GITHUB_WORKSPACE/patches/0001-FROMGIT-drivers-Add-KernelSU.patch .
-        patch -p1 < 0001-FROMGIT-drivers-Add-KernelSU.patch
-        KSU_VERSION=$(grep -e "^KSU_VERSION" drivers/kernelsu/Makefile | awk '{print $3}')
-        echo "KSU_VERSION: $KSU_VERSION"
-        echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-        SYMBOL_LIST=./android/abi_gki_aarch64
-        cat ./drivers/kernelsu/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
-        echo "oplus"
-        cp $GITHUB_WORKSPACE/patches/0001-FROMGIT-treewide-Import-oplus-module.patch .
-        patch -p1 < 0001-FROMGIT-treewide-Import-oplus-module.patch
-        echo "manual"
-        cp $GITHUB_WORKSPACE/patches/0003-KernelSU-Allows-manual-hooking-without-using-kprobes.patch .
-        patch -p1 < 0003-KernelSU-Allows-manual-hooking-without-using-kprobes.patch
-        cd /mnt/kernel_workspace
-        echo "SUSFS"
-        # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
-        cd /mnt/kernel_workspace
-        echo "ack"
-        # cp /mnt/kernel_workspace/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch /mnt/kernel_workspace/common/
-        # cp /mnt/kernel_workspace/susfs4ksu/kernel_patches/fs/* /mnt/kernel_workspace/common/fs/
-        # cp /mnt/kernel_workspace/susfs4ksu/kernel_patches/include/linux/* /mnt/kernel_workspace/common/include/linux/
-        # cd /mnt/kernel_workspace/common
-        # patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch
-        echo "Misc"
-        cd /mnt/kernel_workspace
-        echo "Get kernel version"
-        cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
-        echo "Kernel version : $(cat ./kver)"
-        echo KVER=$(cat ./kver) >> $GITHUB_ENV
-        rm -rf ./kver
-        echo "Adding configuration settings to gki_defconfig..."
-        KCONFIG=/mnt/kernel_workspace/common/arch/arm64/configs/gki_defconfig
-        echo "CONFIG_KSU=y" >> ${KCONFIG}
-        echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
-        echo "CONFIG_F2FS_SEQZONE=y" >> ${KCONFIG}
-        # echo "CONFIG_PID_NS=y" >> ${KCONFIG}
-        # echo "CONFIG_POSIX_MQUEUE=y" >> ${KCONFIG}
-        # echo "CONFIG_IPC_NS=y" >> ${KCONFIG}
-        # echo "CONFIG_USER_NS=y" >> ${KCONFIG}
-        # echo "CONFIG_BPF_STREAM_PARSER=y" >> ${KCONFIG}
-        echo "Remove -dirty"
-        sed -i '/stable_scmversion_cmd/s/maybe-dirty/zsck/;s/-$android_release-$KMI_GENERATION//g' ./build/kernel/kleaf/impl/stamp.bzl
-        sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' ./common/BUILD.bazel
-        sed -i '2s/check_defconfig//' ./common/build.config.gki
-        rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+      - name: Set Environment Variable
+        run: |
+          echo "BUILD_TIME=$(date "+%y%m%d%H")" >> $GITHUB_ENV
+          echo "KBUILD_BUILD_USER=7a72" >> $GITHUB_ENV
+          echo "KBUILD_BUILD_HOST=action" >> $GITHUB_ENV
+          
+          sudo mkdir -p /mnt/kernel_workspace
+          sudo chmod 0777 /mnt/kernel_workspace
+          
+          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
+          
+          git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
+          git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
 
-    - name: Build Kernel
-      run: |
-        cd /mnt/kernel_workspace
-        export KBUILD_BUILD_HOST=action
-        export KBUILD_BUILD_USER=7a72
-        tools/bazel build --config=fast //common:kernel_aarch64_dist
-        cp ./bazel-bin/common/kernel_aarch64/Image $GITHUB_WORKSPACE/kernel_workspace/
+      - name: Restore Pre-built Toolchain
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: toolchain-${{ runner.os }}-r536225
 
-    - name: Make Anykernel3
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
-        cp $GITHUB_WORKSPACE/kernel_workspace/Image AnyKernel3/
+      - name: Download the Pre-built Toolchain
+        run: |
+          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.installed"
+          if [ ! -f "$INSTALLED" ]; then
+            mkdir -p ${{ env.TOOLCHAIN_DIR }}
+            cd ${{ env.TOOLCHAIN_DIR }}
+            wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
+            tar axf clang-r536225.tar.gz
+            rm clang-r536225.tar.gz
+            touch "$INSTALLED"
+          fi
 
-    - name: Upload Image
-      uses: actions/upload-artifact@v4
-      with:
-        name: Image
-        path: kernel_workspace/Image
+      - name: Sync the Kernel Source Code
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          
+          echo "Sync kernel source"
+          git clone https://git.codelinaro.org/clo/la/kernel/common -b ks-kernel.lnx.3.0.r1-rel --depth 1 common
+          
+          echo "Get kernel version"
+          cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
+          echo KVER=$(cat ./kver) >> $GITHUB_ENV
+          
+          cd common
+          
+          echo "Pre-modify"
+          # sed -i '/stable_scmversion_cmd/s/maybe-dirty/zsck/;s/-$android_release-$KMI_GENERATION//g' ./build/kernel/kleaf/impl/stamp.bzl
+          sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' ./BUILD.bazel
+          sed -i '2s/check_defconfig//' ./build.config.gki
+          rm ./android/abi_gki_protected_exports_* || echo "No protected exports!"
+          sed -i '$s|echo "\$res"|echo "-zsck"|' scripts/setlocalversion || true
+          # sed -i 's/^#define LINUX_COMPILER.*$/#define LINUX_COMPILER\t\t"clang-r536225"/' scripts/mkcompile_h || true
 
-    - name: Upload AnyKernel3
-      uses: actions/upload-artifact@v4
-      with:
-        name: AK3-waffle-stock-${{ env.KVER }}-${{ env.KSUVER }}_${{ env.BUILD_TIME }}
-        path: kernel_workspace/AnyKernel3/*
+      - name: Add KSU
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          
+          echo "Adding KSU..."
+          cd common
+          cp $GITHUB_WORKSPACE/patches/0001-FROMGIT-drivers-Add-KernelSU.patch .
+          patch -p1 < 0001-FROMGIT-drivers-Add-KernelSU.patch
+          KSU_VERSION=$(grep -e "^KSU_VERSION" drivers/kernelsu/Makefile | awk '{print $3}')
+          echo "KSU_VERSION: $KSU_VERSION"
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          SYMBOL_LIST=./android/abi_gki_aarch64
+          cat ./drivers/kernelsu/export_symbol.txt | awk '{sub("[ \t]+","");print "  "$0}' >> $SYMBOL_LIST
+
+      - name: Apply patches
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          cd common
+          echo "oplus"
+          cp $GITHUB_WORKSPACE/patches/0001-FROMGIT-treewide-Import-oplus-module.patch .
+          patch -p1 < 0001-FROMGIT-treewide-Import-oplus-module.patch
+          echo "manual"
+          cp $GITHUB_WORKSPACE/patches/0003-KernelSU-Allows-manual-hooking-without-using-kprobes.patch .
+          patch -p1 < 0003-KernelSU-Allows-manual-hooking-without-using-kprobes.patch
+
+      - name: Add Configuration Settings
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace/common..."
+          cd "/mnt/kernel_workspace/common"
+
+          echo "Adding configuration settings to defconfig..."
+          KCONFIG=$(realpath ./arch/arm64/configs/gki_defconfig)
+          echo "CONFIG_KSU=y" >> ${KCONFIG}
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          echo "CONFIG_F2FS_SEQZONE=y" >> ${KCONFIG}
+
+      - name: Build the Kernel
+        run: |
+          echo "Changing to configuration directory: /mnt/kernel_workspace/common..."
+          cd "/mnt/kernel_workspace/common"
+          
+          # echo "Clean dirty"
+          # git add -A
+          # git commit -s -a -m "build"
+          
+          export PATH=${{ env.TOOLCHAIN_DIR }}/bin:$PATH
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          
+          echo "Building the kernel..."
+          
+          kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
+          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          make CC="ccache clang" $kargs # Build the kernel itself
+          
+          # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
+          # make $kargs install INSTALL_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel image(s) and devicetrees
+          # make $kargs headers_install INSTALL_HDR_PATH=/mnt/kernel_workspace/Kernel_Prebuilts/usr # Save the kernel headers
+
+      # - name: Upload Kernel_Prebuilts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: Kernel_Prebuilts
+      #     path: /mnt/kernel_workspace/Kernel_Prebuilts/*
+
+      - name: Create AnyKernel3
+        run: |
+          echo "Changing to configuration directory: /mnt/kernel_workspace/..."
+          cd "/mnt/kernel_workspace/"
+          
+          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
+          
+          echo "Copying Image"
+          cp /mnt/kernel_workspace/common/out/arch/arm64/boot/Image ./AnyKernel3/Image
+
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-waffle-${{ env.KVER }}_${{ env.BUILD_TIME }}
+          path: /mnt/kernel_workspace/AnyKernel3/*
