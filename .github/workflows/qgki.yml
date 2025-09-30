@@ -146,7 +146,7 @@ jobs:
           echo "Building the kernel..."
           
           kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
-          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          make CC="ccache clang" $kargs gki_defconfig  # Build the kernel config
           make CC="ccache clang" $kargs # Build the kernel itself
           
           # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
