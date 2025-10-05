@@ -112,7 +112,6 @@ jobs:
         run: |
           echo "Changing to directory: /mnt/kernel_workspace..."
           cd "/mnt/kernel_workspace"
-          
 
       - name: Add Configuration Settings
         run: |
@@ -125,6 +124,10 @@ jobs:
           sed -i '1i CONFIG_LOCALVERSION="-zsck"' ${KCONFIG}
           sed -i '/^CONFIG_TMPFS=y$/a CONFIG_TMPFS_POSIX_ACL=y' ${KCONFIG}
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          echo "CONFIG_PID_NS=y" >> ${KCONFIG}
+          echo "CONFIG_POSIX_MQUEUE=y" >> ${KCONFIG}
+          echo "CONFIG_IPC_NS=y" >> ${KCONFIG}
+          echo "CONFIG_USER_NS=y" >> ${KCONFIG}
 
       - name: Build the Kernel
         run: |
