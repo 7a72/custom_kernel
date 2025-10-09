@@ -97,7 +97,7 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/7a72/KernelSU/refs/heads/manual/kernel/setup.sh" | bash -s manual y
+          curl -LSs "https://raw.githubusercontent.com/7a72/KernelSU/refs/heads/manual/kernel/setup.sh" | bash -s manual_susfs y
           cd ./KernelSU
           KSU_VERSION=$(grep -e "^KSU_VERSION" kernel/Makefile | awk '{print $3}')
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
