@@ -126,6 +126,7 @@ jobs:
           cd "/mnt/kernel_workspace/common"
 
           echo "Adding configuration settings to defconfig..."
+          KCONFIG=$(realpath ./arch/arm64/configs/gki_defconfig)
           sed -i '1i # CONFIG_LOCALVERSION_AUTO is not set' ${KCONFIG}
           sed -i '1i CONFIG_LOCALVERSION="-zsck"' ${KCONFIG}
           sed -i '/^CONFIG_TMPFS=y$/a CONFIG_TMPFS_POSIX_ACL=y' ${KCONFIG}
