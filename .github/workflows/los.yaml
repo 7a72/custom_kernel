@@ -107,12 +107,12 @@ jobs:
           echo "Changing to directory: /mnt/kernel_workspace..."
           cd "/mnt/kernel_workspace"
           
-          # git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android14-6.1
-          # cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
-          # cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
-          # cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+          git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android14-6.1
+          cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
+          cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           cd ./common
-          # patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch
+          patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || echo ovo.
           cp $GITHUB_WORKSPACE/patches/rekernel_6_1.patch .
           patch -p1 < rekernel_6_1.patch
           cp $GITHUB_WORKSPACE/patches/hide_lineage.patch .
@@ -131,6 +131,7 @@ jobs:
           sed -i '1i CONFIG_LOCALVERSION="-zsck"' ${KCONFIG}
           sed -i '/^CONFIG_TMPFS=y$/a CONFIG_TMPFS_POSIX_ACL=y' ${KCONFIG}
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ${KCONFIG}
           echo "CONFIG_REKERNEL=y" >> ${KCONFIG}
           # echo "CONFIG_LTO_CLANG_THIN=y" >> ${KCONFIG}
           # echo "CONFIG_MODULE_FORCE_LOAD=y" >> ${KCONFIG}
