@@ -131,6 +131,7 @@ jobs:
           sed -i '1i CONFIG_LOCALVERSION="-zsck"' ${KCONFIG}
           sed -i '/^CONFIG_TMPFS=y$/a CONFIG_TMPFS_POSIX_ACL=y' ${KCONFIG}
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          echo "CONFIG_REKERNEL=y" >> ${KCONFIG}
           # echo "CONFIG_LTO_CLANG_THIN=y" >> ${KCONFIG}
           # echo "CONFIG_MODULE_FORCE_LOAD=y" >> ${KCONFIG}
           # echo "CONFIG_PID_NS=y" >> ${KCONFIG}
