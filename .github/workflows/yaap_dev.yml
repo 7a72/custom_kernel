@@ -77,7 +77,7 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Sync kernel source"
-          git clone --depth=1 https://github.com/7a72/kernel_oneplus_waffle.git -b waffle common
+          git clone --depth=500 https://github.com/7a72/kernel_oneplus_waffle.git -b waffle common
           git checkout c2384b8
           
           cd common
