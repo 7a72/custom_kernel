@@ -1,4 +1,4 @@
-name: yaap_dev
+name: Build Kernel test
 
 on:
   workflow_dispatch:
@@ -78,12 +78,12 @@ jobs:
           
           echo "Sync kernel source"
           git clone --depth=1 https://github.com/7a72/kernel_oneplus_waffle.git -b waffle common
-          
-          echo "Get kernel version"
-          cat ./common/Makefile | head -4 | grep -e '^VERSION' -e '^PATCHLEVEL' -e '^SUBLEVEL' | sed 's/^[A-Za-z0-9_]* = //' | paste -sd '.' - > ./kver
-          echo KVER=$(cat ./kver) >> $GITHUB_ENV
+          git checkout c2384b8
           
           cd common
+          echo "Get kernel version"
+          echo KVER=$(awk '/^(VERSION|PATCHLEVEL|SUBLEVEL) =/ {v[++i]=$3} END {print v[1]"."v[2]"."v[3]}' ./Makefile) >> $GITHUB_ENV
+          echo "${{ env.KVER }}"
           
           echo "Pre-modify"
           rm -rf ./android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -97,22 +97,36 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/5ec1cff/KernelSU/main/kernel/setup.sh" | bash -
-          cd ./KernelSU/
-          KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
+          curl -LSs "https://raw.githubusercontent.com/7a72/KernelSU/refs/heads/manual/kernel/setup.sh" | bash -s manual y
+          cd ./KernelSU
+          KSU_VERSION=$(grep -e "^KSU_VERSION" kernel/Makefile | awk '{print $3}')
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          git revert -m 1 $(git log --grep="remove devpts hook" --pretty=format:"%h") -n
-          cp $GITHUB_WORKSPACE/patches/k.diff .
-          patch -p1 < k.diff
+
+      - name: Apply patches
+        run: |
+          echo "Changing to directory: /mnt/kernel_workspace..."
+          cd "/mnt/kernel_workspace"
+          
+          cd ./common
+          cp $GITHUB_WORKSPACE/patches/rekernel_6_1.patch .
+          patch -p1 < rekernel_6_1.patch
+          cp $GITHUB_WORKSPACE/patches/hide_lineage.patch .
+          patch -p1 < hide_lineage.patch
+          cp $GITHUB_WORKSPACE/patches/module_load.patch .
+          patch -p1 < module_load.patch
 
       - name: Add Configuration Settings
         run: |
           echo "Changing to directory: /mnt/kernel_workspace/common..."
           cd "/mnt/kernel_workspace/common"
 
-          # echo "Adding configuration settings to defconfig..."
+          echo "Adding configuration settings to defconfig..."
           # KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
+          KCONFIG=$(realpath ./arch/arm64/configs/gki_defconfig)KCONFIG=$(realpath ./arch/arm64/configs/gki_defconfig)
+          sed -i '1i # CONFIG_LOCALVERSION_AUTO is not set' ${KCONFIG}
+          sed -i '1i CONFIG_LOCALVERSION="-zsck"' ${KCONFIG}
+          sed -i '/^CONFIG_TMPFS=y$/a CONFIG_TMPFS_POSIX_ACL=y' ${KCONFIG}
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
 
       - name: Build the Kernel
         run: |
@@ -129,7 +143,7 @@ jobs:
           echo "Building the kernel..."
           
           kargs="ARCH=arm64 LLVM=1 LLVM_IAS=1 -j$(nproc --all) O=out KBUILD_BUILD_HOST=${{ env.KBUILD_BUILD_HOST }} KBUILD_BUILD_USER=${{ env.KBUILD_BUILD_USER }}"
-          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config vendor/zsck.config # Build the kernel config
+          make CC="ccache clang" $kargs gki_defconfig vendor/pineapple_GKI.config vendor/oplus/pineapple_GKI.config # vendor/zsck.config # Build the kernel config
           make CC="ccache clang" $kargs # Build the kernel itself
           
           # make $kargs modules_install INSTALL_MOD_PATH=/mnt/kernel_workspace/Kernel_Prebuilts # Save the kernel modules
@@ -155,5 +169,7 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-OP12-yaap-${{ env.KVER }}_${{ env.BUILD_TIME }}
+          name: AK3-OP12-yaap-${{ env.KVER }}-${{ env.KSUVER }}_${{ env.BUILD_TIME }}
           path: /mnt/kernel_workspace/AnyKernel3/*
+
+          
