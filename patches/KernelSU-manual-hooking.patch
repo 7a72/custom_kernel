@@ -1,0 +1,165 @@
+diff --git a/drivers/input/input.c b/drivers/input/input.c
+index 78be582b576..910f84fd7e2 100644
+--- a/drivers/input/input.c
++++ b/drivers/input/input.c
+@@ -387,6 +387,11 @@ static void input_event_dispose(struct input_dev *dev, int disposition,
+ 	}
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_input_hook __read_mostly;
++extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
++#endif
++
+ void input_handle_event(struct input_dev *dev,
+ 			unsigned int type, unsigned int code, int value)
+ {
+@@ -395,6 +400,12 @@ void input_handle_event(struct input_dev *dev,
+ 	lockdep_assert_held(&dev->event_lock);
+ 
+ 	disposition = input_get_disposition(dev, type, code, &value);
++
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_input_hook))
++		ksu_handle_input_handle_event(&type, &code, &value);
++#endif
++
+ 	if (disposition != INPUT_IGNORE_EVENT) {
+ 		if (type != EV_SYN)
+ 			add_input_randomness(type, code, value);
+diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
+index 4f25015aa53..e984a329b56 100644
+--- a/fs/devpts/inode.c
++++ b/fs/devpts/inode.c
+@@ -596,6 +596,10 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+ 	return dentry;
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_devpts(struct inode*);
++#endif
++
+ /**
+  * devpts_get_priv -- get private data for a slave
+  * @pts_inode: inode of the slave
+@@ -604,6 +608,9 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+  */
+ void *devpts_get_priv(struct dentry *dentry)
+ {
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_devpts(dentry->d_inode);
++#endif
+ 	if (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)
+ 		return NULL;
+ 	return dentry->d_fsdata;
+diff --git a/fs/exec.c b/fs/exec.c
+index 0149f828d40..d1e91c564b5 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1878,6 +1878,13 @@ static int bprm_execve(struct linux_binprm *bprm,
+ 
+ 	return retval;
+ }
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_execveat_hook __read_mostly;
++extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
++                               void *envp, int *flags);
++extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
++                                        void *argv, void *envp, int *flags);
++#endif
+ 
+ static int do_execveat_common(int fd, struct filename *filename,
+ 			      struct user_arg_ptr argv,
+@@ -1887,6 +1894,13 @@ static int do_execveat_common(int fd, struct filename *filename,
+ 	struct linux_binprm *bprm;
+ 	int retval;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_execveat_hook))
++		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++	else
++		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
++#endif
++
+ 	if (IS_ERR(filename))
+ 		return PTR_ERR(filename);
+ 
+diff --git a/fs/open.c b/fs/open.c
+index 026a4047cb5..bcb117c22a2 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -338,6 +338,11 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
+ }
+ EXPORT_SYMBOL_GPL(vfs_fallocate);
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++                                int *flags);
++#endif
++
+ int ksys_fallocate(int fd, int mode, loff_t offset, loff_t len)
+ {
+ 	struct fd f = fdget(fd);
+@@ -426,6 +431,10 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW;
+ 	const struct cred *old_cred = NULL;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
++#endif
++
+ 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+ 		return -EINVAL;
+ 
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 7a2ff6157ed..e7432affc4a 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -447,10 +447,21 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+ }
+ EXPORT_SYMBOL(kernel_read);
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern bool ksu_vfs_read_hook __read_mostly;
++extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
++                               size_t *count_ptr, loff_t **pos);
++#endif
++
+ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ {
+ 	ssize_t ret;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	if (unlikely(ksu_vfs_read_hook))
++		ksu_handle_vfs_read(&file, &buf, &count, &pos);
++#endif
++
+ 	if (!(file->f_mode & FMODE_READ))
+ 		return -EBADF;
+ 	if (!(file->f_mode & FMODE_CAN_READ))
+diff --git a/fs/stat.c b/fs/stat.c
+index ef50573c72a..81954993b10 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -256,6 +256,10 @@ static int vfs_statx(int dfd, struct filename *filename, int flags,
+ 	return error;
+ }
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#endif
++
+ int vfs_fstatat(int dfd, const char __user *filename,
+ 			      struct kstat *stat, int flags)
+ {
+@@ -263,6 +267,10 @@ int vfs_fstatat(int dfd, const char __user *filename,
+ 	int statx_flags = flags | AT_NO_AUTOMOUNT;
+ 	struct filename *name;
+ 
++#ifdef CONFIG_KSU_MANUAL_HOOK
++	ksu_handle_stat(&dfd, &filename, &flags);
++#endif
++
+ 	name = getname_flags(filename, getname_statx_lookup_flags(statx_flags), NULL);
+ 	ret = vfs_statx(dfd, name, statx_flags, stat, STATX_BASIC_STATS);
+ 	putname(name);
