@@ -1,4 +1,4 @@
-name: Build lmi Kernel with KSU
+name: Build lmi Kernel
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
     - name: Build kernel for lmi with KSU
       run: |
         cd $GITHUB_WORKSPACE/kernel
-        bash build.sh lmi ksu
+        bash build.sh lmi
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -37,5 +37,3 @@ jobs:
         name: lmi-ksu-kernel
         path: |
           kernel/*.zip
-          kernel/out/arch/arm64/boot/Image
-          kernel/out/arch/arm64/boot/dtb
