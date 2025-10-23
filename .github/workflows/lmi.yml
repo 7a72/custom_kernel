@@ -25,11 +25,12 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE
         git clone https://github.com/7a72/kernel_xiaomi_sm8250_mod --depth 1 kernel
+        sed -i 's/CONFIG_LOCALVERSION="-perf"/CONFIG_LOCALVERSION="-zsck"/g' kernel/arch/arm64/configs/lmi_defconfig
 
-    - name: Build kernel for lmi with KSU
+    - name: Build kernel for lmi
       run: |
         cd $GITHUB_WORKSPACE/kernel
-        bash build.sh lmi
+        KBUILD_BUILD_USER=7a72 KBUILD_BUILD_HOST=action bash build.sh lmi miui
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
