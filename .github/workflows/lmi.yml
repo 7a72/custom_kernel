@@ -30,7 +30,7 @@ jobs:
     - name: Build kernel for lmi
       run: |
         cd $GITHUB_WORKSPACE/kernel
-        KBUILD_BUILD_USER=7a72 KBUILD_BUILD_HOST=action bash build.sh lmi miui
+        KBUILD_BUILD_USER=7a72 KBUILD_BUILD_HOST=action bash build.sh lmi all
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
