@@ -56,6 +56,7 @@ jobs:
       - name: Download the Pre-built Toolchain
         run: |
             sudo mkdir -p ${{ env.TOOLCHAIN_DIR }}
+            chmod 0777 ${{ env.TOOLCHAIN_DIR }}
             cd ${{ env.TOOLCHAIN_DIR }}
             wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/20052113d2a5552cfff78ac7b21fd7953cc1c592/clang-r563880.tar.gz
             tar axf clang-r563880.tar.gz 
