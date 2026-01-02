@@ -57,7 +57,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ env.TOOLCHAIN_DIR }}
-          key: toolchain-${{ runner.os }}-r547379
+          key: toolchain-${{ runner.os }}-r563880
 
       - name: Download the Pre-built Toolchain
         run: |
@@ -65,9 +65,9 @@ jobs:
           if [ ! -f "$INSTALLED" ]; then
             mkdir -p ${{ env.TOOLCHAIN_DIR }}
             cd ${{ env.TOOLCHAIN_DIR }}
-            wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
-            tar axf clang-r547379.tar.gz 
-            rm clang-r547379.tar.gz 
+            wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/20052113d2a5552cfff78ac7b21fd7953cc1c592/clang-r563880.tar.gz
+            tar axf clang-r563880.tar.gz 
+            rm clang-r563880.tar.gz 
             touch "$INSTALLED"
           fi
 
@@ -97,10 +97,11 @@ jobs:
           cd "/mnt/kernel_workspace"
           
           echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/7a72/KernelSU/refs/heads/manual/kernel/setup.sh" | bash -s manual y
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
           cd ./KernelSU
-          KSU_VERSION=$(grep -e "^KSU_VERSION" kernel/Makefile | awk '{print $3}')
+          KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 30000)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Kbuild
 
       - name: Apply patches
         run: |
@@ -119,7 +120,7 @@ jobs:
           echo "Adding configuration settings to defconfig..."
           KCONFIG=$(realpath ./arch/arm64/configs/vendor/zsck.config)
           # KCONFIG=$(realpath ./arch/arm64/configs/gki_defconfig)
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
+          # echo "CONFIG_KSU_MANUAL_HOOK=y" >> ${KCONFIG}
 
       - name: Build the Kernel
         run: |
