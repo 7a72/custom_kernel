@@ -48,28 +48,19 @@ jobs:
           sudo mkdir -p /mnt/kernel_workspace
           sudo chmod 0777 /mnt/kernel_workspace
           
-          echo "TOOLCHAIN_DIR=$HOME/toolchain" >> $GITHUB_ENV
+          echo "TOOLCHAIN_DIR=/mnt/toolchain" >> $GITHUB_ENV
           
           git config --global user.email "${{ env.KBUILD_BUILD_USER }}@${{ env.KBUILD_BUILD_HOST }}"
           git config --global user.name "${{ env.KBUILD_BUILD_HOST }}"
 
-      - name: Restore Pre-built Toolchain
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.TOOLCHAIN_DIR }}
-          key: toolchain-${{ runner.os }}-r563880
-
       - name: Download the Pre-built Toolchain
         run: |
-          INSTALLED="${{ env.TOOLCHAIN_DIR }}/.installed"
-          if [ ! -f "$INSTALLED" ]; then
             mkdir -p ${{ env.TOOLCHAIN_DIR }}
             cd ${{ env.TOOLCHAIN_DIR }}
             wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/20052113d2a5552cfff78ac7b21fd7953cc1c592/clang-r563880.tar.gz
             tar axf clang-r563880.tar.gz 
             rm clang-r563880.tar.gz 
             touch "$INSTALLED"
-          fi
 
       - name: Sync the Kernel Source Code
         run: |
